@@ -248,6 +248,19 @@ stage {
   background-color: %(hover)s;
   border-radius: 14px;
 }
+/* Show Apps: the Leo Camp sparkle with Tux instead of the grid icon. */
+#dashtodockContainer .show-apps .overview-icon {
+  background-image: url("leocamp-show-apps.svg");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-color: transparent;
+  color: transparent;
+}
+#dashtodockContainer .show-apps:hover .overview-icon,
+#dashtodockContainer .show-apps:checked .overview-icon {
+  background-color: %(hover)s;
+}
 #dashtodockContainer .dash-separator {
   background-color: %(line)s;
 }

@@ -25,6 +25,22 @@ DARK = dict(
 )
 
 
+SHOW_APPS_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="-128 -128 256 256">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f2369b"/><stop offset="1" stop-color="#ff7b2e"/></linearGradient></defs>
+<ellipse cx="0" cy="8" rx="122" ry="38" transform="rotate(-12)" fill="none" stroke="{ink}" stroke-width="6"/>
+<path d="M0,-1 C0.09,-0.3 0.3,-0.09 1,0 C0.3,0.09 0.09,0.3 0,1 C-0.09,0.3 -0.3,0.09 -1,0 C-0.3,-0.09 -0.09,-0.3 0,-1Z" transform="translate(9,9) scale(118)" fill="#6a2be8"/>
+<path d="M0,-1 C0.09,-0.3 0.3,-0.09 1,0 C0.3,0.09 0.09,0.3 0,1 C-0.09,0.3 -0.3,0.09 -1,0 C-0.3,-0.09 -0.09,-0.3 0,-1Z" transform="scale(118)" fill="url(#g)" stroke="{ink}" stroke-width="7" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+<g transform="translate(0,10) scale(0.31)" stroke="{ink}" stroke-width="12" stroke-linejoin="round">
+<ellipse cx="-62" cy="150" rx="58" ry="26" fill="#ff8a3d"/><ellipse cx="62" cy="150" rx="58" ry="26" fill="#ff8a3d"/>
+<path d="M0,-170 C70,-170 95,-110 98,-40 C150,10 150,110 100,145 C60,165 -60,165 -100,145 C-150,110 -150,10 -98,-40 C-95,-110 -70,-170 0,-170Z" fill="#17111c"/>
+<path d="M0,-60 C55,-60 82,0 82,60 C82,120 50,148 0,148 C-50,148 -82,120 -82,60 C-82,0 -55,-60 0,-60Z" fill="#fbf3e6"/>
+<ellipse cx="-30" cy="-105" rx="22" ry="30" fill="#fbf3e6"/><ellipse cx="30" cy="-105" rx="22" ry="30" fill="#fbf3e6"/>
+<circle cx="-24" cy="-100" r="10" fill="#17111c" stroke="none"/><circle cx="24" cy="-100" r="10" fill="#17111c" stroke="none"/>
+<path d="M-34,-62 C-20,-78 20,-78 34,-62 C20,-44 -20,-44 -34,-62Z" fill="#ffd23f"/></g>
+</svg>
+"""
+
+
 def fill(template, values):
     return (HERE / "templates" / template).read_text() % values
 
@@ -35,6 +51,7 @@ def build_css():
         out.mkdir(parents=True, exist_ok=True)
         values = dict(palette, variant=name, scheme=scheme, g1=G1, g2=G2, shadow=SHADOW)
         (out / "gnome-shell.css").write_text(fill("gnome-shell.css", values))
+        (out / "leocamp-show-apps.svg").write_text(SHOW_APPS_ICON.replace("{ink}", palette["line"]))
     both = {f"l_{k}": v for k, v in LIGHT.items()}
     both.update({f"d_{k}": v for k, v in DARK.items()})
     both.update(g1=G1, g2=G2, shadow=SHADOW)
