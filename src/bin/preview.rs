@@ -56,7 +56,7 @@ fn main() {
             false,
             0.25,
         ),
-        ("slider-keyboard", Surface::Slider(SliderKind::Keyboard), None, false, 1.0),
+        ("slider-keyboard", Surface::Slider(SliderKind::Keyboard), None, false, 0.8),
     ];
     for (name, surface, pressed, muted, fraction) in views {
         let stride = WIDTH * 4;

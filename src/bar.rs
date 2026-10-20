@@ -33,8 +33,19 @@ const ORANGE: Rgb = Rgb { red: 255, green: 138, blue: 61 };
 const YELLOW: Rgb = Rgb { red: 255, green: 210, blue: 63 };
 const VIOLET: Rgb = Rgb { red: 167, green: 123, blue: 255 };
 const CYAN: Rgb = Rgb { red: 88, green: 214, blue: 255 };
-const GRADIENT_START: Rgb = Rgb { red: 242, green: 54, blue: 155 };
-const GRADIENT_END: Rgb = Rgb { red: 255, green: 123, blue: 46 };
+const fn hex(value: u32) -> Rgb {
+    #[allow(clippy::cast_possible_truncation)]
+    Rgb {
+        red: (value >> 16) as u8,
+        green: (value >> 8) as u8,
+        blue: value as u8,
+    }
+}
+
+/// Three-stop slider gradients, each ending on its button's icon colour.
+const DISPLAY_GRADIENT: [Rgb; 3] = [hex(0xff2d00), hex(0xff9a00), hex(0xffe14d)];
+const KEYBOARD_GRADIENT: [Rgb; 3] = [hex(0xd4145a), hex(0xff5a1f), hex(0xffb347)];
+const VOLUME_GRADIENT: [Rgb; 3] = [hex(0x2b12ff), hex(0x8b3dff), hex(0xff4fd8)];
 const PAUSED_LABEL: Rgb = rgb(150);
 const PROGRESS_FILLED: Rgb = Rgb {
     red: 255,
@@ -92,7 +103,7 @@ const LOW_ICON: Span = Span { x: 340, width: 110 };
 const TRACK: Span = Span { x: 470, width: 1_490 };
 const HIGH_ICON: Span = Span { x: 1_980, width: 110 };
 const TRACK_TOUCH_LEFT: u32 = 330;
-const TRACK_HEIGHT: u32 = 8;
+const TRACK_HEIGHT: u32 = 12;
 const KNOB_DIAMETER: u32 = 34;
 const KNOB_RING: u32 = 6;
 const CLOSE_GLYPH: u32 = 22;
@@ -488,7 +499,7 @@ impl Bar {
         };
         let fraction = view.fraction.clamp(0.0, 1.0);
         draw_track(frame, track, 1.0, TRACK_EMPTY, TRACK_EMPTY)?;
-        draw_gradient_fill(frame, track, fraction)?;
+        draw_gradient_fill(frame, track, fraction, slider_gradient(kind))?;
         let knob_x = track.x + fraction_of(track.width, fraction);
         let center_y = self.height / 2;
         let diameter = self.scaled_y(KNOB_DIAMETER).max(4);
@@ -678,23 +689,52 @@ const fn icon_color(target: Target) -> Rgb {
         Target::Action(Action::LockScreen) => YELLOW,
         Target::Action(Action::ToggleDoNotDisturb) => VIOLET,
         Target::Action(Action::ToggleMicrophone) => CYAN,
-        Target::SliderButton(SliderKind::Display) => YELLOW,
-        Target::SliderButton(SliderKind::Keyboard) => ORANGE,
+        Target::SliderButton(SliderKind::Display) => DISPLAY_GRADIENT[2],
+        Target::SliderButton(SliderKind::Keyboard) => KEYBOARD_GRADIENT[2],
         Target::Action(Action::MediaPrevious | Action::MediaPlayPause | Action::MediaNext) => {
             MAGENTA
         }
         Target::Action(Action::ToggleMute) => CYAN,
-        Target::SliderButton(SliderKind::Volume) => VIOLET,
+        Target::SliderButton(SliderKind::Volume) => VOLUME_GRADIENT[1],
         _ => LABEL,
     }
 }
 
-/// Fills the left `fraction` of a pill track with the magenta→orange
-/// gradient, in narrow strips of interpolated colour.
+const fn slider_gradient(kind: SliderKind) -> [Rgb; 3] {
+    match kind {
+        SliderKind::Display => DISPLAY_GRADIENT,
+        SliderKind::Keyboard => KEYBOARD_GRADIENT,
+        SliderKind::Volume => VOLUME_GRADIENT,
+    }
+}
+
+/// Colour at `t` (0..=1) along a three-stop gradient.
+fn gradient_at(stops: [Rgb; 3], t: f64) -> Rgb {
+    let t = t.clamp(0.0, 1.0) * 2.0;
+    let (a, b, local) = if t <= 1.0 {
+        (stops[0], stops[1], t)
+    } else {
+        (stops[1], stops[2], t - 1.0)
+    };
+    let mix = |a: u8, b: u8| {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let value = (f64::from(a) + (f64::from(b) - f64::from(a)) * local).round() as u8;
+        value
+    };
+    Rgb {
+        red: mix(a.red, b.red),
+        green: mix(a.green, b.green),
+        blue: mix(a.blue, b.blue),
+    }
+}
+
+/// Fills the left `fraction` of a pill track with a gradient spanning the
+/// whole track, in narrow strips of interpolated colour.
 fn draw_gradient_fill(
     frame: &mut Xrgb8888Frame<'_>,
     track: Rectangle,
     fraction: f64,
+    stops: [Rgb; 3],
 ) -> Result<(), BarError> {
     const STRIPS: u32 = 48;
     let filled = fraction_of(track.width, fraction);
@@ -705,17 +745,8 @@ fn draw_gradient_fill(
     let mut x = 0;
     while x < filled {
         let width = strip.min(filled - x);
-        let t = f64::from(x) / f64::from(track.width.max(1));
-        let mix = |a: u8, b: u8| {
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let value = (f64::from(a) + (f64::from(b) - f64::from(a)) * t).round() as u8;
-            value
-        };
-        let color = Rgb {
-            red: mix(GRADIENT_START.red, GRADIENT_END.red),
-            green: mix(GRADIENT_START.green, GRADIENT_END.green),
-            blue: mix(GRADIENT_START.blue, GRADIENT_END.blue),
-        };
+        let middle = f64::from(x) + f64::from(width) / 2.0;
+        let color = gradient_at(stops, middle / f64::from(track.width.max(1)));
         // Same pill mask as the track, clipped to this strip.
         let piece = Rectangle {
             x: track.x + x,
