@@ -16,16 +16,16 @@ const FUNCTION_SLOT_COUNT: u32 = 13;
 const PLATE_RADIUS: u32 = 8;
 
 const BACKGROUND: Rgb = rgb(0);
-const PLATE: Rgb = rgb(53);
-const PRESSED_PLATE: Rgb = rgb(76);
+const PLATE: Rgb = rgb(72);
+const PRESSED_PLATE: Rgb = rgb(104);
 // Leo Camp accents (theme/build.py): violet toggles, magenta levels.
 const ACTIVE_PLATE: Rgb = Rgb {
     red: 106,
     green: 43,
     blue: 232,
 };
-const LABEL: Rgb = rgb(242);
-const TRACK_EMPTY: Rgb = rgb(72);
+const LABEL: Rgb = rgb(255);
+const TRACK_EMPTY: Rgb = rgb(92);
 const KNOB: Rgb = rgb(255);
 // Camp palette for icons, by group.
 const MAGENTA: Rgb = Rgb { red: 255, green: 79, blue: 176 };
