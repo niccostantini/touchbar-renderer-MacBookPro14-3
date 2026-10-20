@@ -101,30 +101,44 @@ stage {
   background-gradient-end: %(g2)s;
   color: #ffffff;
 }
-/* Toggles with an arrow: one pill split by a thin divider, the arrow
-   carrying the gradient's end colour when on. */
-.quick-menu-toggle .quick-toggle {
+/* Toggles with an arrow (GNOME 50: .quick-toggle-has-menu): one pill,
+   the halves joined by the separator, the arrow carrying the gradient's end
+   colour when on. */
+.quick-toggle-has-menu .quick-toggle:ltr {
   border-radius: 999px 0 0 999px;
   border-right-width: 0;
-  box-shadow: none;
 }
-.quick-menu-toggle .quick-toggle-arrow {
+.quick-toggle-has-menu .quick-toggle:ltr:last-child {
+  border-radius: 999px;
+  border-right-width: 2px;
+}
+.quick-toggle-has-menu .quick-toggle-menu-button,
+.quick-toggle-has-menu .quick-toggle-menu-button:focus,
+.quick-toggle-has-menu .quick-toggle-menu-button:active {
   background-color: %(chip)s;
   color: %(ink)s;
   border: 2px solid %(line)s;
-  border-left: 2px solid %(line)s;
-  border-radius: 0 999px 999px 0;
-  box-shadow: none;
+  border-left-width: 0;
+  box-shadow: none !important;
 }
-.quick-menu-toggle .quick-toggle-arrow:hover {
+.quick-toggle-has-menu .quick-toggle-menu-button:ltr {
+  border-radius: 0 999px 999px 0;
+}
+.quick-toggle-has-menu .quick-toggle-menu-button:hover {
   background-color: %(hover)s;
 }
-.quick-menu-toggle .quick-toggle-arrow:checked {
+.quick-toggle-has-menu .quick-toggle-menu-button:checked,
+.quick-toggle-has-menu .quick-toggle-menu-button:checked:focus {
   background-color: %(g2)s;
   color: #ffffff;
 }
-.quick-menu-toggle .quick-toggle-arrow:checked:hover {
+.quick-toggle-has-menu .quick-toggle-menu-button:checked:hover {
   background-color: #ff9150;
+}
+.quick-toggle-has-menu .quick-toggle-separator,
+.quick-toggle-has-menu:checked .quick-toggle-separator {
+  width: 2px;
+  background-color: %(line)s;
 }
 .quick-settings-system-item .icon-button,
 .icon-button {
