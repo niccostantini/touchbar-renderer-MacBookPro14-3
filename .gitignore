@@ -1,0 +1,8 @@
+/target
+# Mai committare dati del T1 o backup EFI (identificano la macchina).
+*.tar
+*.tar.gz
+*.gpg
+*.sha256
+FDRData
+EMBEDDEDOS/

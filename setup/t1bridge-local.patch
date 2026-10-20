@@ -1,0 +1,120 @@
+diff --git a/crates/t1-platform/src/touchbar_io.rs b/crates/t1-platform/src/touchbar_io.rs
+index 1f1c65d..9ee8bfd 100644
+--- a/crates/t1-platform/src/touchbar_io.rs
++++ b/crates/t1-platform/src/touchbar_io.rs
+@@ -339,6 +339,9 @@ pub enum TouchBarKey {
+     F10,
+     F11,
+     F12,
++    BrightnessDown,
++    BrightnessUp,
++    Print,
+ }
+ 
+ /// Exclusive ownership of the focused Escape/F1-F12 virtual keyboard.
+diff --git a/crates/t1-touchbar-hw/c/t1_touchbar_uinput.c b/crates/t1-touchbar-hw/c/t1_touchbar_uinput.c
+index 9f2d2d3..e6eca30 100644
+--- a/crates/t1-touchbar-hw/c/t1_touchbar_uinput.c
++++ b/crates/t1-touchbar-hw/c/t1_touchbar_uinput.c
+@@ -13,7 +13,7 @@
+ #include <sys/stat.h>
+ #include <unistd.h>
+ 
+-#define KEY_COUNT 13U
++#define KEY_COUNT 16U
+ 
+ struct t1_touchbar_uinput {
+ 	int descriptor;
+@@ -35,6 +35,9 @@ static const unsigned int key_codes[KEY_COUNT] = {
+ 	KEY_F10,
+ 	KEY_F11,
+ 	KEY_F12,
++	KEY_BRIGHTNESSDOWN,
++	KEY_BRIGHTNESSUP,
++	KEY_SYSRQ,
+ };
+ 
+ _Static_assert(T1_TOUCHBAR_KEY_ESCAPE == 0,
+diff --git a/crates/t1-touchbar-hw/c/t1_touchbar_uinput.h b/crates/t1-touchbar-hw/c/t1_touchbar_uinput.h
+index cc37d1e..47564a1 100644
+--- a/crates/t1-touchbar-hw/c/t1_touchbar_uinput.h
++++ b/crates/t1-touchbar-hw/c/t1_touchbar_uinput.h
+@@ -17,6 +17,9 @@ enum t1_touchbar_key {
+ 	T1_TOUCHBAR_KEY_F10,
+ 	T1_TOUCHBAR_KEY_F11,
+ 	T1_TOUCHBAR_KEY_F12,
++	T1_TOUCHBAR_KEY_BRIGHTNESS_DOWN,
++	T1_TOUCHBAR_KEY_BRIGHTNESS_UP,
++	T1_TOUCHBAR_KEY_PRINT,
+ };
+ 
+ struct t1_touchbar_uinput;
+diff --git a/crates/t1-touchbar-hw/src/service.rs b/crates/t1-touchbar-hw/src/service.rs
+index 7ae7689..b70e5b7 100644
+--- a/crates/t1-touchbar-hw/src/service.rs
++++ b/crates/t1-touchbar-hw/src/service.rs
+@@ -606,15 +606,26 @@ fn handle_request(
+             BrightnessKind::Keyboard,
+             percentage.value(),
+         ),
+-        ClientMessage::StepDisplayBrightness(direction) => queue_brightness_step(
+-            connection,
+-            request_id,
+-            dimensions,
+-            services.actions,
+-            services.session,
+-            BrightnessKind::Display,
+-            direction,
+-        ),
++        // GNOME 50 owns the panel backlight and reverts logind writes, so the
++        // display step is delivered as a standard brightness key instead.
++        ClientMessage::StepDisplayBrightness(direction) => {
++            let key = match direction {
++                crate::wire::StepDirection::Down => TouchBarKey::BrightnessDown,
++                crate::wire::StepDirection::Up => TouchBarKey::BrightnessUp,
++            };
++            if services.keyboard.tap(key).is_err() {
++                if services.keyboard.release_all().is_err() {
++                    return Err(());
++                }
++                return connection.queue_error(request_id, ErrorCode::IoFailure, dimensions);
++            }
++            connection.queue_control(
++                request_id,
++                ServiceMessage::Ack,
++                Some(dimensions),
++                AfterSend::None,
++            )
++        }
+         ClientMessage::StepKeyboardBacklight(direction) => queue_brightness_step(
+             connection,
+             request_id,
+@@ -976,6 +987,7 @@ const fn platform_key(key: KeyCode) -> TouchBarKey {
+         KeyCode::F10 => TouchBarKey::F10,
+         KeyCode::F11 => TouchBarKey::F11,
+         KeyCode::F12 => TouchBarKey::F12,
++        KeyCode::Print => TouchBarKey::Print,
+     }
+ }
+ 
+diff --git a/crates/t1-touchbar-hw/src/wire.rs b/crates/t1-touchbar-hw/src/wire.rs
+index c61eea3..f91264b 100644
+--- a/crates/t1-touchbar-hw/src/wire.rs
++++ b/crates/t1-touchbar-hw/src/wire.rs
+@@ -234,6 +234,8 @@ pub enum KeyCode {
+     F10 = 68,
+     F11 = 87,
+     F12 = 88,
++    /// Print Screen (`KEY_SYSRQ`), opens the desktop screenshot tool.
++    Print = 99,
+ }
+ 
+ impl KeyCode {
+@@ -257,6 +259,7 @@ impl KeyCode {
+             68 => Self::F10,
+             87 => Self::F11,
+             88 => Self::F12,
++            99 => Self::Print,
+             _ => return None,
+         })
+     }

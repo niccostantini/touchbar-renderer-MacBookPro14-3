@@ -1,0 +1,57 @@
+#!/bin/sh
+# Desktop provider v1 per t1bridge su Ubuntu/GNOME (contratto: ~/t1bridge/docs/interfaces.md).
+# Volume via PipeWire (wpctl), media via MPRIS (busctl). Deadline 500 ms, stdout <= 128 byte.
+SINK=@DEFAULT_AUDIO_SINK@
+export LC_ALL=C
+
+[ "$1" = v1 ] || exit 2
+op=$2
+
+player() {
+	# Preferisce un player in riproduzione, altrimenti il primo disponibile.
+	first=
+	for p in $(busctl --user list --no-legend 2>/dev/null | awk '$1 ~ /^org\.mpris\.MediaPlayer2\./ {print $1}'); do
+		[ -n "$first" ] || first=$p
+		st=$(busctl --user get-property "$p" /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player PlaybackStatus 2>/dev/null)
+		case $st in *Playing*) echo "$p"; return 0 ;; esac
+	done
+	[ -n "$first" ] && echo "$first"
+}
+
+mpris() {
+	p=$(player) || exit 1
+	[ -n "$p" ] || exit 1
+	busctl --user call "$p" /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player "$1"
+}
+
+case $op in
+status)
+	caps=0 vol=- muted=-
+	out=$(wpctl get-volume $SINK 2>/dev/null)
+	if [ -n "$out" ]; then
+		caps=1
+		vol=$(echo "$out" | awk '{v=int($2*100+0.5); if (v>100) v=100; print v}')
+		case $out in *MUTED*) muted=1 ;; *) muted=0 ;; esac
+	fi
+	[ -n "$(player)" ] && caps=$((caps | 2))
+	echo "T1BRIDGE-DESKTOP 1 $caps $vol $muted"
+	;;
+set-volume)
+	case $3 in '' | *[!0-9]*) exit 2 ;; esac
+	[ "$3" -le 100 ] || exit 2
+	wpctl set-volume $SINK "$3%" && wpctl set-mute $SINK 0 || exit 1
+	# Feedback sonoro come i tasti volume di GNOME, al massimo uno ogni 300 ms (slider).
+	stamp=${XDG_RUNTIME_DIR:-/tmp}/t1bridge-volume-sound
+	now=$(date +%s%N)
+	last=$(cat "$stamp" 2>/dev/null || echo 0)
+	if [ $((now - last)) -gt 300000000 ]; then
+		echo "$now" >"$stamp"
+		setsid -f pw-play /usr/share/sounds/freedesktop/stereo/audio-volume-change.oga >/dev/null 2>&1 </dev/null
+	fi
+	;;
+toggle-mute) wpctl set-mute $SINK toggle ;;
+media-previous) mpris Previous ;;
+media-play-pause) mpris PlayPause ;;
+media-next) mpris Next ;;
+*) exit 2 ;;
+esac
