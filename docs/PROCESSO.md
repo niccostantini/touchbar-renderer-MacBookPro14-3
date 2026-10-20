@@ -172,3 +172,23 @@ Dettagli tecnici nel [README](../README.md).
   ai programmi esterni; servirebbe una piccola estensione di GNOME Shell.
 - Con Touch ID attivo, la barra nera a schermo bloccato nasconderebbe
   l'indicazione dell'impronta: andrà rivista.
+
+## 7. Stop (sospensione) che non si riprende
+
+Lo schermo interno di questo Mac è collegato alla GPU AMD (Radeon Pro 560):
+in sospensione `amdgpu` non riesce a spegnerla (`Failed to disable DPM!`,
+`GPU Recovery Failed`) e il sistema si blocca, sia con `deep` sia con
+`s2idle`. Ripiego attuale, finché non si passa alla GPU Intel:
+
+- logind blocca la sessione invece di sospendere
+  (`/etc/systemd/logind.conf.d/no-suspend-lid.conf`: `HandleLidSwitch=lock`,
+  `HandleLidSwitchExternalPower=lock`, `HandleLidSwitchDocked=ignore`,
+  `HandleSuspendKey=lock`);
+- sospensione automatica di GNOME disattivata (`sleep-inactive-*-type
+  'nothing'`);
+- `desktop/lid-blank` (servizio utente `lid-blank.service`) spegne lo schermo
+  via DPMS a coperchio chiuso e lo riaccende all'apertura: il DPMS su AMD
+  funziona, è solo la sospensione completa a bloccarsi.
+
+Installazione del servizio:
+`ln -sf ~/touchbar-renderer/desktop/lid-blank.service ~/.config/systemd/user/ && systemctl --user enable --now lid-blank.service`

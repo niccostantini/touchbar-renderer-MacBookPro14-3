@@ -1,0 +1,21 @@
+#!/bin/sh
+# Spegne lo schermo (DPMS di Mutter) quando il coperchio si chiude e lo
+# riaccende all'apertura. Serve perché lo stop si blocca sulla GPU AMD di
+# questo Mac: logind blocca la sessione invece di sospendere
+# (/etc/systemd/logind.conf.d/no-suspend-lid.conf), ma lo schermo restava acceso.
+
+apply() {
+	case "$(busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+		org.freedesktop.login1.Manager LidClosed 2>/dev/null)" in
+	"b true") mode=3 ;;
+	"b false") mode=0 ;;
+	*) return ;;
+	esac
+	busctl --user set-property org.gnome.Mutter.DisplayConfig /org/gnome/Mutter/DisplayConfig \
+		org.gnome.Mutter.DisplayConfig PowerSaveMode i "$mode" 2>/dev/null
+}
+
+gdbus monitor --system --dest org.freedesktop.login1 --object-path /org/freedesktop/login1 |
+	while read -r line; do
+		case "$line" in *LidClosed*) apply ;; esac
+	done

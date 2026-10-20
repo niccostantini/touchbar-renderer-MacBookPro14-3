@@ -1,0 +1,11 @@
+[Unit]
+Description=Spegni lo schermo a coperchio chiuso
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/bin/sh %h/touchbar-renderer/desktop/lid-blank
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target
