@@ -2,10 +2,18 @@
 # Keeps the Shell theme and icons in step with GNOME's light/dark style
 # (GTK and wallpaper follow it natively). Run by leocamp-scheme.service.
 
+# Icone: WhiteSur rosa se installate (vinceliuice/WhiteSur-icon-theme,
+# "install.sh -t pink"), altrimenti Papirus con cartelle magenta.
+if [ -d "$HOME/.local/share/icons/WhiteSur-pink" ]; then
+	LIGHT_ICONS=WhiteSur-pink DARK_ICONS=WhiteSur-pink-dark
+else
+	LIGHT_ICONS=LeoCamp-Papirus DARK_ICONS=LeoCamp-Papirus-Dark
+fi
+
 apply() {
 	case "$(gsettings get org.gnome.desktop.interface color-scheme)" in
-	*dark*) shell=LeoCamp-Dark icons=LeoCamp-Papirus-Dark ;;
-	*) shell=LeoCamp icons=LeoCamp-Papirus ;;
+	*dark*) shell=LeoCamp-Dark icons=$DARK_ICONS ;;
+	*) shell=LeoCamp icons=$LIGHT_ICONS ;;
 	esac
 	gsettings set org.gnome.shell.extensions.user-theme name "$shell" 2>/dev/null
 	gsettings set org.gnome.desktop.interface icon-theme "$icons"

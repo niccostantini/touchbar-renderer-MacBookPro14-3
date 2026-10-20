@@ -90,7 +90,8 @@ MIT. Parti derivate da t1bridge (MIT): vedi `LICENSE-t1bridge`.
 Tema GNOME ispirato allo stile di brave.com/leo: crema e nero, serif da
 rivista (Fraunces), card con bordo spesso e ombra netta, gradiente
 magenta → arancio, accenti viola; variante scura automatica; dock in basso;
-icone Papirus con cartelle magenta; sfondi generati.
+icone WhiteSur rosa (o Papirus con cartelle magenta); sfondi generati.
+Icone WhiteSur: `git clone https://github.com/vinceliuice/WhiteSur-icon-theme && WhiteSur-icon-theme/install.sh -t pink`.
 
 ```sh
 sudo apt install gnome-shell-extensions papirus-icon-theme   # una volta

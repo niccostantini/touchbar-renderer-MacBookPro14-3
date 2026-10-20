@@ -25,13 +25,16 @@ const ACTIVE_PLATE: Rgb = Rgb {
     blue: 232,
 };
 const LABEL: Rgb = rgb(242);
-const TRACK_FILLED: Rgb = Rgb {
-    red: 242,
-    green: 54,
-    blue: 155,
-};
 const TRACK_EMPTY: Rgb = rgb(72);
 const KNOB: Rgb = rgb(255);
+// Camp palette for icons, by group.
+const MAGENTA: Rgb = Rgb { red: 255, green: 79, blue: 176 };
+const ORANGE: Rgb = Rgb { red: 255, green: 138, blue: 61 };
+const YELLOW: Rgb = Rgb { red: 255, green: 210, blue: 63 };
+const VIOLET: Rgb = Rgb { red: 167, green: 123, blue: 255 };
+const CYAN: Rgb = Rgb { red: 88, green: 214, blue: 255 };
+const GRADIENT_START: Rgb = Rgb { red: 242, green: 54, blue: 155 };
+const GRADIENT_END: Rgb = Rgb { red: 255, green: 123, blue: 46 };
 const PAUSED_LABEL: Rgb = rgb(150);
 const PROGRESS_FILLED: Rgb = Rgb {
     red: 255,
@@ -385,9 +388,11 @@ impl Bar {
                 }
                 _ => custom_icon(target),
             };
+            // Toggled plates are coloured, so their icon goes white.
+            let tint = if toggled { LABEL } else { icon_color(target) };
             match icon {
-                Some(icon) => draw_icon(frame, bounds, self.scaled_y(CUSTOM_ICON), icon, LABEL)?,
-                None => stock_art::draw_symbol(frame, bounds, normal_symbol(target), LABEL)?,
+                Some(icon) => draw_icon(frame, bounds, self.scaled_y(CUSTOM_ICON), icon, tint)?,
+                None => stock_art::draw_symbol(frame, bounds, normal_symbol(target), tint)?,
             }
         }
         if let Some(now_playing) = view.now_playing {
@@ -470,8 +475,9 @@ impl Bar {
         )?;
 
         let (low, high) = slider_symbols(kind, view.muted);
-        stock_art::draw_symbol(frame, self.span_bounds(LOW_ICON), low, LABEL)?;
-        stock_art::draw_symbol(frame, self.span_bounds(HIGH_ICON), high, LABEL)?;
+        let tint = icon_color(Target::SliderButton(kind));
+        stock_art::draw_symbol(frame, self.span_bounds(LOW_ICON), low, tint)?;
+        stock_art::draw_symbol(frame, self.span_bounds(HIGH_ICON), high, tint)?;
 
         let track_height = self.scaled_y(TRACK_HEIGHT).max(2);
         let track = Rectangle {
@@ -481,7 +487,8 @@ impl Bar {
             height: track_height,
         };
         let fraction = view.fraction.clamp(0.0, 1.0);
-        draw_track(frame, track, fraction, TRACK_FILLED, TRACK_EMPTY)?;
+        draw_track(frame, track, 1.0, TRACK_EMPTY, TRACK_EMPTY)?;
+        draw_gradient_fill(frame, track, fraction)?;
         let knob_x = track.x + fraction_of(track.width, fraction);
         let center_y = self.height / 2;
         let diameter = self.scaled_y(KNOB_DIAMETER).max(4);
@@ -661,6 +668,72 @@ const fn normal_symbol(target: Target) -> Symbol {
         | Target::Track
         | Target::NowPlaying => Symbol::VolumeUp,
     }
+}
+
+/// Icon colour by group: system keys warm-to-cool, brightness yellow and
+/// orange, media magenta, audio cyan and violet.
+const fn icon_color(target: Target) -> Rgb {
+    match target {
+        Target::Action(Action::Screenshot) => ORANGE,
+        Target::Action(Action::LockScreen) => YELLOW,
+        Target::Action(Action::ToggleDoNotDisturb) => VIOLET,
+        Target::Action(Action::ToggleMicrophone) => CYAN,
+        Target::SliderButton(SliderKind::Display) => YELLOW,
+        Target::SliderButton(SliderKind::Keyboard) => ORANGE,
+        Target::Action(Action::MediaPrevious | Action::MediaPlayPause | Action::MediaNext) => {
+            MAGENTA
+        }
+        Target::Action(Action::ToggleMute) => CYAN,
+        Target::SliderButton(SliderKind::Volume) => VIOLET,
+        _ => LABEL,
+    }
+}
+
+/// Fills the left `fraction` of a pill track with the magenta→orange
+/// gradient, in narrow strips of interpolated colour.
+fn draw_gradient_fill(
+    frame: &mut Xrgb8888Frame<'_>,
+    track: Rectangle,
+    fraction: f64,
+) -> Result<(), BarError> {
+    const STRIPS: u32 = 48;
+    let filled = fraction_of(track.width, fraction);
+    if filled == 0 {
+        return Ok(());
+    }
+    let strip = track.width.div_ceil(STRIPS).max(1);
+    let mut x = 0;
+    while x < filled {
+        let width = strip.min(filled - x);
+        let t = f64::from(x) / f64::from(track.width.max(1));
+        let mix = |a: u8, b: u8| {
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let value = (f64::from(a) + (f64::from(b) - f64::from(a)) * t).round() as u8;
+            value
+        };
+        let color = Rgb {
+            red: mix(GRADIENT_START.red, GRADIENT_END.red),
+            green: mix(GRADIENT_START.green, GRADIENT_END.green),
+            blue: mix(GRADIENT_START.blue, GRADIENT_END.blue),
+        };
+        // Same pill mask as the track, clipped to this strip.
+        let piece = Rectangle {
+            x: track.x + x,
+            y: track.y,
+            width,
+            height: track.height,
+        };
+        let radius = f64::from(track.height) / 2.0;
+        let full = f64::from(track.width);
+        let mask = crate::art::stock_art::rasterize(width, track.height, |px, py| {
+            let gx = f64::from(x) + px;
+            let cx = gx.max(radius).min(full - radius);
+            (gx - cx).hypot(py - radius) <= radius
+        });
+        frame.blend_mask(piece, &mask, color)?;
+        x += width;
+    }
+    Ok(())
 }
 
 const fn custom_icon(target: Target) -> Option<Icon> {
