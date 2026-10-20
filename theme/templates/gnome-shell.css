@@ -202,7 +202,8 @@ stage {
   background-color: %(surface)s;
   border: 2px solid %(line)s;
   border-radius: 22px;
-  box-shadow: 6px 6px 0 0 %(shadow)s;
+  /* Straight down only: the dock clips anything past its right edge. */
+  box-shadow: 0 6px 0 0 %(shadow)s;
 }
 #dashtodockContainer .dash-item-container .app-well-app:hover .overview-icon,
 #dashtodockContainer .show-apps:hover .overview-icon {
