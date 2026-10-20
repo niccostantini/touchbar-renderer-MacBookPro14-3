@@ -47,6 +47,8 @@ const DISPLAY_GRADIENT: [Rgb; 3] = [hex(0xff2d00), hex(0xff9a00), hex(0xffe14d)]
 const KEYBOARD_GRADIENT: [Rgb; 3] = [hex(0xd4145a), hex(0xff5a1f), hex(0xffb347)];
 const VOLUME_GRADIENT: [Rgb; 3] = [hex(0x2b12ff), hex(0x8b3dff), hex(0xff4fd8)];
 /// The active output pill: the Leo Camp magenta to orange.
+/// Hold-to-lock bar: green to orange.
+const LOCK_GRADIENT: [Rgb; 3] = [hex(0x2ee86f), hex(0xc6d93a), hex(0xff7b2e)];
 const OUTPUT_GRADIENT: [Rgb; 3] = [hex(0xf2369b), hex(0xff5a5a), hex(0xff7b2e)];
 const PAUSED_LABEL: Rgb = rgb(150);
 const PROGRESS_FILLED: Rgb = Rgb {
@@ -624,7 +626,7 @@ impl Bar {
             height: thickness,
         };
         draw_track(frame, track, 1.0, TRACK_EMPTY, TRACK_EMPTY)?;
-        draw_gradient_fill(frame, track, progress, OUTPUT_GRADIENT)
+        draw_gradient_fill(frame, track, progress, LOCK_GRADIENT)
     }
 
     fn render_now_playing(
