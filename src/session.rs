@@ -29,6 +29,7 @@ use crate::mpris::{NowPlaying, Playback};
 use crate::slider::{DisplayStepper, Throttle};
 use crate::system::{self, DoNotDisturb};
 use crate::text::{TextMask, TextRenderer};
+use crate::transition::{Crossfade, FN_FADE, LAYOUT_FADE};
 
 const BUFFER_ID: u32 = 1;
 const FIRST_FRAME_ID: u64 = 1;
@@ -231,6 +232,9 @@ struct Session {
     marquee_offset: u32,
     /// Only the now-playing area changed since the last frame.
     marquee_dirty: bool,
+    /// Surface and geometry of the frame on screen, and a running fade.
+    shown_layout: Option<(Surface, Bar)>,
+    crossfade: Option<Crossfade>,
 }
 
 impl Session {
@@ -298,6 +302,8 @@ impl Session {
             marquee_since: Duration::ZERO,
             marquee_offset: 0,
             marquee_dirty: false,
+            shown_layout: None,
+            crossfade: None,
         })
     }
 
@@ -542,6 +548,7 @@ impl Session {
             || self.stepper.busy()
             || self.input.scrub().is_some()
             || self.input.outputs_open()
+            || self.crossfade.is_some()
             || self
                 .label
                 .as_ref()
@@ -577,16 +584,24 @@ impl Session {
     }
 
     fn submit_if_ready(&mut self, connection: &HardwareConnection) -> Result<(), RendererError> {
-        if !self.registered || self.in_flight.is_some() || !(self.dirty || self.marquee_dirty) {
+        if !self.registered
+            || self.in_flight.is_some()
+            || !(self.dirty || self.marquee_dirty || self.crossfade.is_some())
+        {
             return Ok(());
         }
-        // A marquee step alone repaints just the title area of the frame
-        // already in the buffer; anything else redraws the whole bar.
-        let partial = !self.dirty
-            && !self.screen_off
-            && self.overlay.value == 0
-            && self.input.surface() == Surface::Normal;
-        self.render(partial)?;
+        if self.dirty {
+            self.render_full_with_fade()?;
+        } else if self.crossfade.is_some() {
+            self.step_crossfade();
+        } else {
+            // A marquee step alone repaints just the title area of the frame
+            // already in the buffer.
+            let partial = !self.screen_off
+                && self.overlay.value == 0
+                && self.input.surface() == Surface::Normal;
+            self.render(partial)?;
+        }
         let frame_id = self.take_frame_id();
         self.send(
             ClientMessage::SubmitFrame(SubmitFrame {
@@ -606,6 +621,51 @@ impl Session {
         Ok(())
     }
 
+    /// The surface actually drawn: the Touch ID prompt keeps the normal row.
+    fn shown_surface(&self) -> Surface {
+        match self.input.surface() {
+            Surface::Function if self.overlay_visual_state.is_some() => Surface::Normal,
+            surface => surface,
+        }
+    }
+
+    /// Full redraw; a layout change cross-fades from the frame on screen.
+    fn render_full_with_fade(&mut self) -> Result<(), RendererError> {
+        let layout = (self.shown_surface(), self.bar);
+        let changed = !self.screen_off
+            && self.overlay.value == 0
+            && self.shown_layout.is_some_and(|shown| shown != layout);
+        let previous = (changed && self.crossfade.is_none())
+            .then(|| self.frame.as_mut_slice().to_vec());
+        let fn_change = self
+            .shown_layout
+            .is_some_and(|(surface, _)| (surface == Surface::Function) != (layout.0 == Surface::Function));
+        self.render(false)?;
+        self.shown_layout = Some(layout);
+        if self.screen_off {
+            self.crossfade = None;
+            return Ok(());
+        }
+        let target = self.frame.as_mut_slice().to_vec();
+        if let Some(fade) = self.crossfade.as_mut() {
+            fade.retarget(target);
+        } else if let Some(previous) = previous {
+            let duration = if fn_change { FN_FADE } else { LAYOUT_FADE };
+            self.crossfade = Some(Crossfade::new(previous, target, self.now, duration));
+        }
+        self.step_crossfade();
+        Ok(())
+    }
+
+    fn step_crossfade(&mut self) {
+        let Some(fade) = self.crossfade.as_ref() else {
+            return;
+        };
+        if fade.blend_into(self.now, self.frame.as_mut_slice()) {
+            self.crossfade = None;
+        }
+    }
+
     fn render(&mut self, partial: bool) -> Result<(), RendererError> {
         if self.screen_off {
             self.frame.as_mut_slice().fill(0);
@@ -613,13 +673,9 @@ impl Session {
         }
         let width = self.dimensions.width();
         let height = self.dimensions.height();
+        let surface = self.shown_surface();
         let mut frame = Xrgb8888Frame::new(width, height, self.stride, self.frame.as_mut_slice())
             .map_err(|_| RendererError::Frame)?;
-        // The Touch ID prompt keeps the normal row under it, as built-in does.
-        let surface = match self.input.surface() {
-            Surface::Function if self.overlay_visual_state.is_some() => Surface::Normal,
-            surface => surface,
-        };
         let now_playing = match (&self.snapshot.now_playing, &self.label) {
             (Some(player), Some((_, label))) => Some(NowPlayingView {
                 label,
