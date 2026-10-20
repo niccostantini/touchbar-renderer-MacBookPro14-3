@@ -66,9 +66,9 @@ mod tests {
         let mut out = vec![0; 4];
         assert!(!fade.blend_into(Duration::ZERO, &mut out));
         assert_eq!(out, vec![0; 4]);
-        assert!(!fade.blend_into(Duration::from_millis(80), &mut out));
+        assert!(!fade.blend_into(LAYOUT_FADE / 2, &mut out));
         assert!(out[0] > 100 && out[0] < 200, "{}", out[0]);
-        assert!(fade.blend_into(Duration::from_millis(200), &mut out));
+        assert!(fade.blend_into(LAYOUT_FADE + Duration::from_millis(1), &mut out));
         assert_eq!(out, vec![200; 4]);
     }
 
