@@ -48,7 +48,8 @@ stage {
   background-gradient-start: %(g1)s;
   background-gradient-end: %(g2)s;
   border-radius: 999px;
-  padding: 0 6px;
+  padding: 3px 6px;
+  margin: 3px 0;
 }
 #panel .clock {
   font-family: "Noto Serif Display", serif;
