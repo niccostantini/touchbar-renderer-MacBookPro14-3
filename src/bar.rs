@@ -46,6 +46,8 @@ const fn hex(value: u32) -> Rgb {
 const DISPLAY_GRADIENT: [Rgb; 3] = [hex(0xff2d00), hex(0xff9a00), hex(0xffe14d)];
 const KEYBOARD_GRADIENT: [Rgb; 3] = [hex(0xd4145a), hex(0xff5a1f), hex(0xffb347)];
 const VOLUME_GRADIENT: [Rgb; 3] = [hex(0x2b12ff), hex(0x8b3dff), hex(0xff4fd8)];
+/// The active output pill: the Leo Camp magenta to orange.
+const OUTPUT_GRADIENT: [Rgb; 3] = [hex(0xf2369b), hex(0xff5a5a), hex(0xff7b2e)];
 const PAUSED_LABEL: Rgb = rgb(150);
 const PROGRESS_FILLED: Rgb = Rgb {
     red: 255,
@@ -81,7 +83,7 @@ const CUSTOM_ICON: u32 = 30;
 
 // Now playing: title line and a thin progress bar, shown while a player has
 // a track.
-const NOW_PLAYING: Span = Span { x: 680, width: 472 };
+const NOW_PLAYING: Span = Span { x: 680, width: 336 };
 const NOW_PLAYING_TEXT_HEIGHT: u32 = 42;
 const NOW_PLAYING_FONT: u32 = 23;
 const PROGRESS_Y: u32 = 46;
@@ -89,11 +91,12 @@ const PROGRESS_HEIGHT: u32 = 4;
 
 // Normal strip, right-aligned like the macOS Control Strip: brightness group,
 // media group, audio group.
-const DISPLAY_BUTTON: Span = Span { x: 1_180, width: 130 };
-const KEYBOARD_BUTTON: Span = Span { x: 1_316, width: 130 };
-const PREVIOUS_BUTTON: Span = Span { x: 1_474, width: 130 };
-const PLAY_PAUSE_BUTTON: Span = Span { x: 1_610, width: 130 };
-const NEXT_BUTTON: Span = Span { x: 1_746, width: 130 };
+const DISPLAY_BUTTON: Span = Span { x: 1_044, width: 130 };
+const KEYBOARD_BUTTON: Span = Span { x: 1_180, width: 130 };
+const PREVIOUS_BUTTON: Span = Span { x: 1_338, width: 130 };
+const PLAY_PAUSE_BUTTON: Span = Span { x: 1_474, width: 130 };
+const NEXT_BUTTON: Span = Span { x: 1_610, width: 130 };
+const OUTPUTS_BUTTON: Span = Span { x: 1_768, width: 130 };
 const MUTE_BUTTON: Span = Span { x: 1_904, width: 130 };
 const VOLUME_BUTTON: Span = Span { x: 2_040, width: 130 };
 
@@ -108,6 +111,15 @@ const KNOB_DIAMETER: u32 = 34;
 const KNOB_RING: u32 = 6;
 const CLOSE_GLYPH: u32 = 22;
 const CLOSE_STROKE: f64 = 3.5;
+
+// Audio output picker: pills after the close button.
+const OUTPUTS_LEFT: u32 = 340;
+const OUTPUTS_RIGHT: u32 = 2_160;
+const OUTPUT_GAP: u32 = 16;
+const OUTPUT_MAX_WIDTH: u32 = 440;
+const OUTPUT_LABEL_INSET: u32 = 20;
+/// The picker shows at most this many outputs.
+pub const MAX_OUTPUTS: usize = 4;
 
 const fn rgb(level: u8) -> Rgb {
     Rgb {
@@ -142,6 +154,8 @@ pub enum Action {
     NowPlayingToggle,
     /// Seek the shown track, in thousandths of its length.
     Seek(u16),
+    /// Make the n-th listed audio output the default.
+    SelectOutput(u8),
 }
 
 /// What lies under a contact on the current surface.
@@ -156,6 +170,8 @@ pub enum Target {
     Track,
     /// The now-playing title: tap to pause, drag to seek.
     NowPlaying,
+    /// Opens the audio output picker (normal surface).
+    OutputsButton,
 }
 
 /// Which surface is shown.
@@ -164,6 +180,8 @@ pub enum Surface {
     Normal,
     Function,
     Slider(SliderKind),
+    /// The audio output picker.
+    Outputs,
 }
 
 /// The now-playing area's content.
@@ -186,6 +204,9 @@ pub struct View<'a> {
     /// `Some(muted)` while an application records from a microphone.
     pub microphone: Option<bool>,
     pub now_playing: Option<NowPlayingView<'a>>,
+    /// Pre-rendered output names for the picker, and the active one.
+    pub outputs: &'a [TextMask],
+    pub active_output: Option<usize>,
     /// Slider position, 0.0..=1.0, used only on the slider surface.
     pub fraction: f64,
 }
@@ -196,6 +217,8 @@ pub struct Contextual {
     pub now_playing: bool,
     pub seekable: bool,
     pub microphone: bool,
+    /// Number of audio outputs listed in the picker.
+    pub outputs: u8,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -240,6 +263,7 @@ impl Bar {
                     now_playing: false,
                     seekable: false,
                     microphone: false,
+                    outputs: 0,
                 },
             })
         }
@@ -288,6 +312,27 @@ impl Bar {
         ((x - left) / width).clamp(0.0, 1.0)
     }
 
+    /// Bounds of the n-th of `count` output pills, in display pixels.
+    fn output_pill(self, index: usize, count: usize) -> Rectangle {
+        let count = u32::try_from(count.clamp(1, MAX_OUTPUTS)).unwrap_or(1);
+        let index = u32::try_from(index).unwrap_or(0);
+        let available = OUTPUTS_RIGHT - OUTPUTS_LEFT - (count - 1) * OUTPUT_GAP;
+        let width = (available / count).min(OUTPUT_MAX_WIDTH);
+        self.span_bounds(Span {
+            x: OUTPUTS_LEFT + index * (width + OUTPUT_GAP),
+            width,
+        })
+    }
+
+    /// Room for an output name inside its pill, in display pixels.
+    #[must_use]
+    pub fn output_label_width(self, count: usize) -> u32 {
+        self.output_pill(0, count)
+            .width
+            .saturating_sub(2 * self.scaled_x(OUTPUT_LABEL_INSET))
+            .max(1)
+    }
+
     /// Right edge of the Escape key, where the Touch ID overlay dimming starts.
     #[must_use]
     pub fn escape_right(self) -> u32 {
@@ -325,6 +370,19 @@ impl Bar {
                     .into_iter()
                     .find(|(target, span)| self.target_enabled(*target) && self.within_span(*span, x))
                     .map(|(target, _)| target)
+            }
+            Surface::Outputs => {
+                if self.within(self.function_slot(0), x) {
+                    return Some(Target::Action(Action::Escape));
+                }
+                if self.within_span(CLOSE_BUTTON, x) {
+                    return Some(Target::Close);
+                }
+                let count = usize::from(self.contextual.outputs).min(MAX_OUTPUTS);
+                (0..count)
+                    .find(|index| self.within(self.output_pill(*index, count), x))
+                    .and_then(|index| u8::try_from(index).ok())
+                    .map(|index| Target::Action(Action::SelectOutput(index)))
             }
             Surface::Slider(_) => {
                 if self.within(self.function_slot(0), x) {
@@ -366,7 +424,57 @@ impl Bar {
             Surface::Function => self.render_function_row(frame, view.pressed),
             Surface::Normal => self.render_normal(frame, view),
             Surface::Slider(kind) => self.render_slider(frame, kind, view),
+            Surface::Outputs => self.render_outputs(frame, view),
         }
+    }
+
+    fn render_outputs(self, frame: &mut Xrgb8888Frame<'_>, view: &View<'_>) -> Result<(), BarError> {
+        let escape = Target::Action(Action::Escape);
+        self.draw_plate(frame, self.function_slot(0), plate_color(escape, view))?;
+        stock_art::draw_label(frame, self.function_slot(0), stock_labels::ESC, LABEL)?;
+        let close = self.span_bounds(CLOSE_BUTTON);
+        self.draw_plate(frame, close, plate_color(Target::Close, view))?;
+        draw_close(
+            frame,
+            close,
+            self.scaled_y(CLOSE_GLYPH),
+            f64::from(self.height) * CLOSE_STROKE / f64::from(NATIVE_HEIGHT),
+            LABEL,
+        )?;
+        let count = view.outputs.len().min(MAX_OUTPUTS);
+        for (index, label) in view.outputs.iter().take(count).enumerate() {
+            let pill = self.output_pill(index, count);
+            let target = u8::try_from(index)
+                .map(|index| Target::Action(Action::SelectOutput(index)))
+                .ok();
+            if view.active_output == Some(index) {
+                draw_gradient_fill(frame, pill, 1.0, OUTPUT_GRADIENT)?;
+            } else {
+                let color = if view.pressed.is_some() && view.pressed == target {
+                    PRESSED_PLATE
+                } else {
+                    PLATE
+                };
+                self.draw_plate(frame, pill, color)?;
+            }
+            if label.width > 0
+                && label.width <= pill.width
+                && label.height <= self.height
+                && label.pixels.len() == (label.width * label.height) as usize
+            {
+                frame.blend_mask(
+                    Rectangle {
+                        x: pill.x + (pill.width - label.width) / 2,
+                        y: (self.height - label.height) / 2,
+                        width: label.width,
+                        height: label.height,
+                    },
+                    &label.pixels,
+                    LABEL,
+                )?;
+            }
+        }
+        Ok(())
     }
 
     fn render_normal(self, frame: &mut Xrgb8888Frame<'_>, view: &View<'_>) -> Result<(), BarError> {
@@ -572,7 +680,7 @@ impl Bar {
         }
     }
 
-    fn normal_items(self) -> [(Target, Span); 11] {
+    fn normal_items(self) -> [(Target, Span); 12] {
         [
             (Target::Action(Action::Screenshot), SCREENSHOT_BUTTON),
             (Target::Action(Action::LockScreen), LOCK_BUTTON),
@@ -583,6 +691,7 @@ impl Bar {
             (Target::Action(Action::MediaPrevious), PREVIOUS_BUTTON),
             (Target::Action(Action::MediaPlayPause), PLAY_PAUSE_BUTTON),
             (Target::Action(Action::MediaNext), NEXT_BUTTON),
+            (Target::OutputsButton, OUTPUTS_BUTTON),
             (Target::Action(Action::ToggleMute), MUTE_BUTTON),
             (Target::SliderButton(SliderKind::Volume), VOLUME_BUTTON),
         ]
@@ -598,6 +707,10 @@ impl Bar {
                 Action::MediaPrevious | Action::MediaPlayPause | Action::MediaNext,
             ) => self.capabilities.contains(StockCapabilities::MEDIA),
             Target::Action(Action::ToggleMicrophone) => self.contextual.microphone,
+            Target::OutputsButton => {
+                self.capabilities.contains(StockCapabilities::AUDIO) && self.contextual.outputs > 0
+            }
+            Target::Action(Action::SelectOutput(_)) => self.contextual.outputs > 0,
             Target::Action(Action::NowPlayingToggle | Action::Seek(_)) | Target::NowPlaying => {
                 self.contextual.now_playing
             }
@@ -673,11 +786,13 @@ const fn normal_symbol(target: Target) -> Symbol {
             | Action::ToggleDoNotDisturb
             | Action::ToggleMicrophone
             | Action::NowPlayingToggle
-            | Action::Seek(_),
+            | Action::Seek(_)
+            | Action::SelectOutput(_),
         )
         | Target::Close
         | Target::Track
-        | Target::NowPlaying => Symbol::VolumeUp,
+        | Target::NowPlaying
+        | Target::OutputsButton => Symbol::VolumeUp,
     }
 }
 
@@ -695,6 +810,7 @@ const fn icon_color(target: Target) -> Rgb {
             MAGENTA
         }
         Target::Action(Action::ToggleMute) => CYAN,
+        Target::OutputsButton => ORANGE,
         Target::SliderButton(SliderKind::Volume) => VOLUME_GRADIENT[1],
         _ => LABEL,
     }
@@ -773,6 +889,7 @@ const fn custom_icon(target: Target) -> Option<Icon> {
         Target::Action(Action::LockScreen) => Some(Icon::Padlock),
         Target::Action(Action::ToggleDoNotDisturb) => Some(Icon::Moon),
         Target::Action(Action::ToggleMicrophone) => Some(Icon::Microphone),
+        Target::OutputsButton => Some(Icon::Speaker),
         _ => None,
     }
 }
@@ -873,9 +990,11 @@ mod tests {
         // Contextual elements are inert until present.
         assert_eq!(at(600), None);
         assert_eq!(at(800), None);
-        assert_eq!(at(1_240), Some(Target::SliderButton(SliderKind::Display)));
-        assert_eq!(at(1_380), Some(Target::SliderButton(SliderKind::Keyboard)));
-        assert_eq!(at(1_670), Some(Target::Action(Action::MediaPlayPause)));
+        assert_eq!(at(1_100), Some(Target::SliderButton(SliderKind::Display)));
+        assert_eq!(at(1_240), Some(Target::SliderButton(SliderKind::Keyboard)));
+        assert_eq!(at(1_540), Some(Target::Action(Action::MediaPlayPause)));
+        // The outputs button needs at least one listed output.
+        assert_eq!(at(1_830), None);
         assert_eq!(at(1_960), Some(Target::Action(Action::ToggleMute)));
         assert_eq!(at(2_169), Some(Target::SliderButton(SliderKind::Volume)));
         // Gaps between plates are inert.
@@ -885,11 +1004,18 @@ mod tests {
             now_playing: true,
             seekable: true,
             microphone: true,
+            outputs: 2,
         });
         let at = |x: u32| bar.target_at(f64::from(x), 30.0, Surface::Normal);
+        assert_eq!(at(1_830), Some(Target::OutputsButton));
+        let pick = |x: u32| bar.target_at(f64::from(x), 30.0, Surface::Outputs);
+        assert_eq!(pick(250), Some(Target::Close));
+        assert_eq!(pick(400), Some(Target::Action(Action::SelectOutput(0))));
+        assert_eq!(pick(900), Some(Target::Action(Action::SelectOutput(1))));
+        assert_eq!(pick(2_000), None);
         assert_eq!(at(600), Some(Target::Action(Action::ToggleMicrophone)));
         assert_eq!(at(800), Some(Target::NowPlaying));
-        assert!((bar.now_playing_fraction(680.0 + 236.0) - 0.5).abs() < 1e-9);
+        assert!((bar.now_playing_fraction(680.0 + 168.0) - 0.5).abs() < 1e-9);
     }
 
     #[test]
@@ -940,8 +1066,10 @@ mod tests {
                 Surface::Function,
                 Surface::Slider(SliderKind::Display),
                 Surface::Slider(SliderKind::Volume),
+                Surface::Outputs,
             ] {
                 for fraction in [0.0, 0.5, 1.0] {
+                    let outputs = [label.clone(), label.clone(), label.clone()];
                     let mut frame =
                         Xrgb8888Frame::new(width, height, stride, &mut pixels).unwrap();
                     let view = View {
@@ -955,6 +1083,8 @@ mod tests {
                             playing: false,
                             progress: Some(fraction),
                         }),
+                        outputs: &outputs,
+                        active_output: Some(1),
                         fraction,
                     };
                     bar.render(&mut frame, &view)

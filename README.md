@@ -10,20 +10,43 @@ soluzioni) è in **[docs/PROCESSO.md](docs/PROCESSO.md)**.
 
 ## La barra
 
-```
-[esc] [📷][🔒][🌙][🎙️]   Titolo · Artista ▁▁▁▁▁   [☀][⌨]  [⏮][⏯][⏭]  [🔇][🔊]
-```
+![Barra normale](docs/img/1-normale.png)
 
 - **Esc** sempre a sinistra; con **Fn** premuto: Esc, F1–F12.
-- **📷** apre lo strumento screenshot di GNOME (tasto Stamp).
-- **🔒** blocca lo schermo (`loginctl lock-session`).
-- **🌙** Non disturbare di GNOME; illuminato quando attivo, anche se
-  attivato dal pannello di GNOME.
-- **🎙️** compare solo mentre un'app registra; rosso e barrato se muto.
+- **Ritaglio** apre lo strumento screenshot di GNOME (tasto Stamp).
+- **Lucchetto** blocca lo schermo; **luna** = Non disturbare di GNOME.
+- **Microfono**: compare solo mentre un'app registra; rosso e barrato se muto.
 - **Brano in riproduzione** (MPRIS): tocca per pausa, trascina per spostarti.
-- **☀ ⌨ 🔊** aprono uno slider a tutta barra: tocca, oppure tocca e
-  trascina subito per regolare in un gesto. Chiusura con ✕, Fn o dopo 4 s.
+- **Sole / tastiera / volume** aprono uno slider a tutta barra: tocca, oppure
+  tocca e trascina subito. Chiusura con ✕, Fn o dopo 4 s.
+- **Altoparlante**: sceglie l'uscita audio senza aprire le Impostazioni.
 - A schermo bloccato o spento la barra è nera e non risponde.
+
+### Tutte le schermate
+
+Musica in riproduzione e microfono in uso:
+
+![Musica e microfono](docs/img/2-musica-e-microfono.png)
+
+Muto, Non disturbare attivo, microfono muto, brano in pausa, tasto premuto:
+
+![Stati attivi](docs/img/3-muto-non-disturbare-pausa.png)
+
+Con Fn premuto:
+
+![Tasti Fn](docs/img/4-tasti-fn.png)
+
+Slider della luminosità dello schermo, della tastiera e del volume:
+
+![Slider luminosità](docs/img/5-slider-luminosita.png)
+![Slider tastiera](docs/img/6-slider-tastiera.png)
+![Slider volume](docs/img/7-slider-volume.png)
+
+Scelta dell'uscita audio (quella attiva nel gradiente):
+
+![Uscite audio](docs/img/8-uscite-audio.png)
+
+Le immagini si rigenerano con `cargo run --release --bin preview -- docs/img`.
 
 ## Installazione
 

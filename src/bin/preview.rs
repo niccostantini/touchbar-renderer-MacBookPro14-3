@@ -13,11 +13,37 @@ use touchbar_renderer::text::TextRenderer;
 const WIDTH: u32 = 2_170;
 const HEIGHT: u32 = 60;
 
+/// One preview: file name, surface, pressed target, toggles, slider value
+/// and which contextual elements are present.
+struct Scene {
+    name: &'static str,
+    surface: Surface,
+    pressed: Option<Target>,
+    muted: bool,
+    do_not_disturb: bool,
+    microphone: Option<bool>,
+    playing: Option<bool>,
+    fraction: f64,
+}
+
+const fn scene(name: &'static str, surface: Surface) -> Scene {
+    Scene {
+        name,
+        surface,
+        pressed: None,
+        muted: false,
+        do_not_disturb: false,
+        microphone: None,
+        playing: Some(true),
+        fraction: 0.0,
+    }
+}
+
 fn main() {
     let output = env::args_os().nth(1).expect("usage: preview <output-directory>");
     let output = Path::new(&output);
     fs::create_dir_all(output).expect("output directory");
-    let bar = Bar::new(
+    let base = Bar::new(
         WIDTH,
         HEIGHT,
         StockCapabilities::DISPLAY_BRIGHTNESS
@@ -25,63 +51,79 @@ fn main() {
             | StockCapabilities::AUDIO
             | StockCapabilities::MEDIA,
     )
-    .expect("bar")
-    .with_contextual(Contextual {
+    .expect("bar");
+    let text = TextRenderer::load().expect("system font");
+    let outputs = ["Audio interno", "Kensington Dock", "HDMI / DisplayPort"];
+    let probe = base.with_contextual(Contextual {
         now_playing: true,
         seekable: true,
         microphone: true,
+        outputs: 3,
     });
-    let text = TextRenderer::load().expect("system font");
     let label = text.render(
-        "A Fairly Long Synthetic Song Title · Example Artist",
-        bar.now_playing_font_size(),
-        bar.now_playing_label_width(),
-        bar.now_playing_label_height(),
+        "Vogue · Madonna",
+        probe.now_playing_font_size(),
+        probe.now_playing_label_width(),
+        probe.now_playing_label_height(),
     );
-    let views = [
-        ("normal", Surface::Normal, None, false, 0.0),
-        (
-            "normal-muted-pressed",
-            Surface::Normal,
-            Some(Target::Action(Action::MediaPlayPause)),
-            true,
-            0.0,
-        ),
-        ("function", Surface::Function, None, false, 0.0),
-        ("slider-volume", Surface::Slider(SliderKind::Volume), None, false, 0.62),
-        (
-            "slider-display",
-            Surface::Slider(SliderKind::Display),
-            Some(Target::Close),
-            false,
-            0.25,
-        ),
-        ("slider-keyboard", Surface::Slider(SliderKind::Keyboard), None, false, 0.8),
+    let output_labels: Vec<_> = outputs
+        .iter()
+        .map(|name| {
+            text.render(
+                name,
+                probe.now_playing_font_size(),
+                probe.output_label_width(outputs.len()),
+                probe.now_playing_label_height(),
+            )
+        })
+        .collect();
+    let scenes = [
+        Scene { playing: None, ..scene("1-normale", Surface::Normal) },
+        Scene { microphone: Some(false), ..scene("2-musica-e-microfono", Surface::Normal) },
+        Scene {
+            muted: true,
+            do_not_disturb: true,
+            microphone: Some(true),
+            playing: Some(false),
+            pressed: Some(Target::Action(Action::MediaPlayPause)),
+            ..scene("3-muto-non-disturbare-pausa", Surface::Normal)
+        },
+        Scene { playing: None, ..scene("4-tasti-fn", Surface::Function) },
+        Scene { fraction: 0.35, ..scene("5-slider-luminosita", Surface::Slider(SliderKind::Display)) },
+        Scene { fraction: 0.8, ..scene("6-slider-tastiera", Surface::Slider(SliderKind::Keyboard)) },
+        Scene { fraction: 0.62, ..scene("7-slider-volume", Surface::Slider(SliderKind::Volume)) },
+        Scene { playing: None, ..scene("8-uscite-audio", Surface::Outputs) },
     ];
-    for (name, surface, pressed, muted, fraction) in views {
+    for scene in scenes {
+        let bar = base.with_contextual(Contextual {
+            now_playing: scene.playing.is_some(),
+            seekable: true,
+            microphone: scene.microphone.is_some(),
+            outputs: 3,
+        });
         let stride = WIDTH * 4;
         let mut pixels = vec![0_u8; (stride * HEIGHT) as usize];
         let mut frame = Xrgb8888Frame::new(WIDTH, HEIGHT, stride, &mut pixels).expect("frame");
         bar.render(
             &mut frame,
             &View {
-                surface,
-                pressed,
-                muted,
-                do_not_disturb: muted,
-                // The "muted" previews also show a recording, muted microphone
-                // and a paused track; the others a playing track.
-                microphone: Some(muted),
-                now_playing: Some(NowPlayingView {
+                surface: scene.surface,
+                pressed: scene.pressed,
+                muted: scene.muted,
+                do_not_disturb: scene.do_not_disturb,
+                microphone: scene.microphone,
+                now_playing: scene.playing.map(|playing| NowPlayingView {
                     label: &label,
-                    playing: !muted,
+                    playing,
                     progress: Some(0.35),
                 }),
-                fraction,
+                outputs: &output_labels,
+                active_output: Some(0),
+                fraction: scene.fraction,
             },
         )
         .expect("render");
-        let path = output.join(format!("{name}.png"));
+        let path = output.join(format!("{}.png", scene.name));
         fs::write(&path, png(WIDTH, HEIGHT, &pixels)).expect("write png");
         println!("{}", path.display());
     }

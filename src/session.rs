@@ -17,7 +17,7 @@ use t1_touchbar_hw::wire::{
     ServiceMessage, StepDirection as WireStepDirection, SubmitFrame, TapKeys, WireInputFrame,
 };
 
-use crate::bar::{Action, Bar, Contextual, NowPlayingView, SliderKind, Surface, View};
+use crate::bar::{Action, Bar, Contextual, MAX_OUTPUTS, NowPlayingView, SliderKind, Surface, View};
 use crate::connection::{
     self, HardwareConnection, MAX_PENDING_REQUESTS, NegotiatedConnection, RendererError,
     RequestIds,
@@ -217,6 +217,10 @@ struct Session {
     /// The rendered now-playing label and the string it was made from.
     label: Option<(String, TextMask)>,
     progress_pixel: Option<u32>,
+    /// Rendered output names for the picker and the names they show.
+    output_labels: Vec<TextMask>,
+    output_names: Vec<String>,
+    picker_was_open: bool,
 }
 
 impl Session {
@@ -278,6 +282,9 @@ impl Session {
             text: TextRenderer::load(),
             label: None,
             progress_pixel: None,
+            output_labels: Vec::new(),
+            output_names: Vec::new(),
+            picker_was_open: false,
         })
     }
 
@@ -489,6 +496,17 @@ impl Session {
                 self.context.toggle_microphone();
                 Ok(())
             }
+            Action::SelectOutput(index) => {
+                let index = usize::from(index);
+                if let Some(output) = self.snapshot.outputs.get(index) {
+                    self.context.set_output(output.id);
+                    for (position, output) in self.snapshot.outputs.iter_mut().enumerate() {
+                        output.active = position == index;
+                    }
+                    self.dirty = true;
+                }
+                Ok(())
+            }
             Action::Seek(permille) => {
                 if let Some(player) = self.snapshot.now_playing.as_ref() {
                     self.context.seek(player, f64::from(permille) / 1_000.0);
@@ -510,6 +528,7 @@ impl Session {
             || self.input.slider().kind().is_some()
             || self.stepper.busy()
             || self.input.scrub().is_some()
+            || self.input.outputs_open()
             || self.overlay.value != self.overlay.target
             || self.enrollment.value != self.enrollment.target
     }
@@ -595,6 +614,13 @@ impl Session {
             do_not_disturb: self.shown_do_not_disturb,
             microphone: self.snapshot.microphone.map(|microphone| microphone.muted),
             now_playing,
+            outputs: &self.output_labels,
+            active_output: self
+                .snapshot
+                .outputs
+                .iter()
+                .take(MAX_OUTPUTS)
+                .position(|output| output.active),
             fraction: self.input.slider().fraction(),
         };
         self.bar
@@ -670,6 +696,12 @@ impl Session {
         self.dirty |= self.enrollment.advance(now, ENROLLMENT_PROGRESS_DURATION);
         self.dirty |= self.input.slider_mut().expire(now);
         self.advance_context();
+        self.dirty |= self.input.expire_outputs(now);
+        let picker_open = self.input.outputs_open();
+        if picker_open && !self.picker_was_open {
+            self.context.refresh_outputs();
+        }
+        self.picker_was_open = picker_open;
         self.apply_pending_capabilities()?;
         let do_not_disturb = self.do_not_disturb.active().unwrap_or(false);
         if do_not_disturb != self.shown_do_not_disturb {
@@ -716,7 +748,9 @@ impl Session {
                     .as_ref()
                     .is_some_and(NowPlaying::seekable),
                 microphone: self.snapshot.microphone.is_some(),
+                outputs: u8::try_from(self.snapshot.outputs.len().min(MAX_OUTPUTS)).unwrap_or(0),
             };
+            self.refresh_output_labels();
             // Both copies: the session's draws, the interpreter's hit tests.
             self.bar = self.bar.with_contextual(contextual);
             self.input.set_contextual(contextual);
@@ -734,6 +768,30 @@ impl Session {
             self.progress_pixel = pixel;
             self.dirty = true;
         }
+    }
+
+    fn refresh_output_labels(&mut self) {
+        let names: Vec<String> = self
+            .snapshot
+            .outputs
+            .iter()
+            .take(MAX_OUTPUTS)
+            .map(|output| output.name.clone())
+            .collect();
+        if names == self.output_names {
+            return;
+        }
+        let Some(text) = self.text.as_ref() else {
+            return;
+        };
+        let width = self.bar.output_label_width(names.len());
+        let height = self.bar.now_playing_label_height();
+        let size = self.bar.now_playing_font_size();
+        self.output_labels = names
+            .iter()
+            .map(|name| text.render(name, size, width, height))
+            .collect();
+        self.output_names = names;
     }
 
     fn refresh_label(&mut self) {

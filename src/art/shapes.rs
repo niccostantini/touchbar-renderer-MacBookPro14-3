@@ -104,6 +104,7 @@ pub(crate) enum Icon {
     Moon,
     Microphone,
     MicrophoneOff,
+    Speaker,
 }
 
 /// Draws `icon` centred in `bounds`, `size` pixels square.
@@ -149,6 +150,14 @@ fn icon_contains(icon: Icon, u: f64, v: f64) -> bool {
         }
         Icon::Moon => distance(0.5, 0.52) <= 0.42 && distance(0.70, 0.36) > 0.34,
         Icon::Microphone => microphone(u, v),
+        Icon::Speaker => {
+            // A speaker box outline with woofer ring and tweeter dot.
+            let outer = rounded_rect(u, v, (0.18, 0.04, 0.82, 0.96), 0.12);
+            let inner = rounded_rect(u, v, (0.27, 0.13, 0.73, 0.87), 0.06);
+            let woofer = distance(0.5, 0.62);
+            let tweeter = distance(0.5, 0.28) <= 0.075;
+            (outer && !inner) || (0.10..=0.18).contains(&woofer) || tweeter
+        }
         Icon::MicrophoneOff => {
             // Slash from top-left to bottom-right with a background gap.
             let along = (u - v).abs() / std::f64::consts::SQRT_2;
@@ -202,6 +211,7 @@ mod tests {
             Icon::Moon,
             Icon::Microphone,
             Icon::MicrophoneOff,
+            Icon::Speaker,
         ] {
             for size in [1, 7, 30, 64] {
                 let extent = f64::from(size);

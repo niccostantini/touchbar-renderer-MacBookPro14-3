@@ -20,6 +20,14 @@ pub struct Audio {
     pub muted: bool,
 }
 
+/// One audio output (PipeWire sink) for the picker.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Output {
+    pub id: u32,
+    pub name: String,
+    pub active: bool,
+}
+
 /// Microphone state while some application records.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Microphone {
@@ -36,6 +44,85 @@ pub fn output() -> Option<Audio> {
 pub fn set_volume(percent: u8) {
     wpctl(&["set-volume", SINK, &format!("{}%", percent.min(100))]);
     wpctl(&["set-mute", SINK, "0"]);
+}
+
+/// Lists audio outputs with the current default marked, from `pw-dump`.
+#[must_use]
+pub fn outputs() -> Vec<Output> {
+    let Ok(output) = Command::new("pw-dump").stderr(Stdio::null()).output() else {
+        return Vec::new();
+    };
+    serde_json::from_slice::<Value>(&output.stdout)
+        .map(|objects| parse_outputs(&objects))
+        .unwrap_or_default()
+}
+
+/// Makes `id` the default output.
+pub fn set_output(id: u32) {
+    wpctl(&["set-default", &id.to_string()]);
+}
+
+fn parse_outputs(objects: &Value) -> Vec<Output> {
+    let Some(objects) = objects.as_array() else {
+        return Vec::new();
+    };
+    let default = objects
+        .iter()
+        .filter(|object| object["props"]["metadata.name"].as_str() == Some("default"))
+        .filter_map(|object| object["metadata"].as_array())
+        .flatten()
+        .find(|entry| entry["key"].as_str() == Some("default.audio.sink"))
+        .and_then(|entry| {
+            entry["value"]["name"]
+                .as_str()
+                .map(str::to_owned)
+                .or_else(|| {
+                    // Some versions print the value as a JSON string.
+                    let text = entry["value"].as_str()?;
+                    let parsed: Value = serde_json::from_str(text).ok()?;
+                    parsed["name"].as_str().map(str::to_owned)
+                })
+        });
+    let mut outputs: Vec<Output> = objects
+        .iter()
+        .filter_map(|object| {
+            let props = &object["info"]["props"];
+            if props["media.class"].as_str() != Some("Audio/Sink") {
+                return None;
+            }
+            let id = u32::try_from(object["id"].as_u64()?).ok()?;
+            let node = props["node.name"].as_str().unwrap_or_default();
+            let description = props["node.description"]
+                .as_str()
+                .or_else(|| props["node.nick"].as_str())
+                .unwrap_or(node);
+            Some(Output {
+                id,
+                name: short_name(description),
+                active: default.as_deref() == Some(node),
+            })
+        })
+        .collect();
+    outputs.sort_by_key(|output| output.id);
+    outputs
+}
+
+/// Drops the channel/format tail PipeWire appends to device names
+/// ("Audio interno Stereo analogico" becomes "Audio interno").
+fn short_name(description: &str) -> String {
+    const TAILS: [&str; 10] = [
+        " Stereo analogico", " Stereo digitale", " Analog Stereo", " Digital Stereo",
+        " Surround analogico", " Analog Surround", " Mono analogico", " Analog Mono",
+        " Stereo", " (IEC958)",
+    ];
+    let mut name = description.trim().to_owned();
+    for tail in TAILS {
+        if let Some(index) = name.find(tail) {
+            name.truncate(index);
+        }
+    }
+    let name = name.trim();
+    if name.is_empty() { description.trim().to_owned() } else { name.to_owned() }
 }
 
 pub fn toggle_output_mute() {
@@ -165,6 +252,32 @@ mod tests {
         assert!(!recording(&json!([node("Stream/Input/Audio", "idle", false)])));
         assert!(!recording(&json!([node("Stream/Input/Audio", "running", true)])));
         assert!(!recording(&json!([node("Stream/Output/Audio", "running", false)])));
+    }
+
+    #[test]
+    fn outputs_are_listed_with_the_default_marked() {
+        let dump = json!([
+            {"id": 44, "type": "PipeWire:Interface:Node", "info": {"props": {
+                "media.class": "Audio/Sink", "node.name": "synthetic.speakers",
+                "node.description": "Audio interno Stereo analogico"}}},
+            {"id": 38, "type": "PipeWire:Interface:Node", "info": {"props": {
+                "media.class": "Audio/Sink", "node.name": "synthetic.dock",
+                "node.description": "Example Dock Stereo digitale (IEC958)"}}},
+            {"id": 50, "type": "PipeWire:Interface:Node", "info": {"props": {
+                "media.class": "Audio/Source", "node.name": "synthetic.mic"}}},
+            {"id": 30, "type": "PipeWire:Interface:Metadata",
+             "props": {"metadata.name": "default"},
+             "metadata": [{"subject": 0, "key": "default.audio.sink",
+                           "value": {"name": "synthetic.speakers"}}]}
+        ]);
+        let outputs = parse_outputs(&dump);
+        assert_eq!(
+            outputs,
+            vec![
+                Output { id: 38, name: "Example Dock".into(), active: false },
+                Output { id: 44, name: "Audio interno".into(), active: true },
+            ]
+        );
     }
 
     #[test]

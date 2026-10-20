@@ -14,7 +14,7 @@ use t1_touchbar_hw::digitizer::DisplayDimensions;
 use t1_touchbar_hw::wire::{self, InputContact, WireInputFrame};
 
 use crate::bar::{Action, Bar, Contextual, SliderKind, Surface, Target};
-use crate::slider::SliderState;
+use crate::slider::{AUTO_CLOSE_AFTER, SliderState};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InputError;
@@ -42,6 +42,8 @@ pub struct InputInterpreter {
     slider: SliderState,
     /// Contact dragging along the now-playing title, and its position.
     scrub: Option<(ContactId, Option<f64>)>,
+    /// Last activity while the audio output picker is open.
+    outputs_open: Option<Duration>,
 }
 
 impl InputInterpreter {
@@ -63,6 +65,7 @@ impl InputInterpreter {
             press_targets: BTreeMap::new(),
             slider: SliderState::default(),
             scrub: None,
+            outputs_open: None,
         })
     }
 
@@ -85,6 +88,26 @@ impl InputInterpreter {
         !self.wait_for_touch_release && self.gestures.is_idle()
     }
 
+    #[must_use]
+    pub const fn outputs_open(&self) -> bool {
+        self.outputs_open.is_some()
+    }
+
+    fn close_outputs(&mut self) {
+        self.outputs_open = None;
+    }
+
+    /// Closes the output picker after the idle timeout; returns whether it closed.
+    pub fn expire_outputs(&mut self, now: Duration) -> bool {
+        let expired = self
+            .outputs_open
+            .is_some_and(|since| self.gestures.is_idle() && now.saturating_sub(since) >= AUTO_CLOSE_AFTER);
+        if expired {
+            self.outputs_open = None;
+        }
+        expired
+    }
+
     /// Seek preview while the title is being dragged.
     #[must_use]
     pub fn scrub(&self) -> Option<f64> {
@@ -97,6 +120,9 @@ impl InputInterpreter {
         self.bar = self.bar.with_contextual(contextual);
         if !contextual.now_playing {
             self.scrub = None;
+        }
+        if contextual.outputs == 0 {
+            self.close_outputs();
         }
     }
 
@@ -116,6 +142,8 @@ impl InputInterpreter {
     pub fn surface(&self) -> Surface {
         if self.fn_pressed {
             Surface::Function
+        } else if self.outputs_open.is_some() {
+            Surface::Outputs
         } else {
             self.slider.kind().map_or(Surface::Normal, Surface::Slider)
         }
@@ -140,6 +168,7 @@ impl InputInterpreter {
         };
         if frame.fn_pressed && !self.fn_pressed {
             self.slider.close();
+            self.close_outputs();
         }
         self.fn_pressed = frame.fn_pressed;
         let contacts = frame
@@ -222,7 +251,10 @@ impl InputInterpreter {
             .filter(|contact| !self.covered(**contact, overlay_state))
             .and_then(|contact| self.bar.target_at(contact.x(), contact.y(), surface))
             .filter(|target| {
-                matches!(target, Target::Action(_) | Target::Close | Target::NowPlaying)
+                matches!(
+                    target,
+                    Target::Action(_) | Target::Close | Target::NowPlaying | Target::OutputsButton
+                )
             });
         outcome.redraw |= self.pressed != pressed;
         self.pressed = pressed;
@@ -263,7 +295,12 @@ impl InputInterpreter {
                     outcome.redraw = true;
                 }
             }
-            _ => self.slider.touch(now),
+            _ => {
+                self.slider.touch(now);
+                if self.outputs_open.is_some() {
+                    self.outputs_open = Some(now);
+                }
+            }
         }
     }
 
@@ -280,12 +317,22 @@ impl InputInterpreter {
         match target {
             Target::Action(action) => {
                 self.slider.touch(now);
+                if matches!(action, Action::SelectOutput(_)) {
+                    self.close_outputs();
+                    outcome.redraw = true;
+                }
                 if !outcome.actions.contains(&action) {
                     outcome.actions.push(action);
                 }
             }
             Target::Close => {
                 self.slider.close();
+                self.close_outputs();
+                outcome.redraw = true;
+            }
+            Target::OutputsButton => {
+                self.slider.close();
+                self.outputs_open = Some(now);
                 outcome.redraw = true;
             }
             Target::NowPlaying => {
@@ -310,6 +357,7 @@ impl InputInterpreter {
         self.pressed = None;
         self.scrub = None;
         self.slider.close();
+        self.close_outputs();
     }
 }
 
@@ -406,7 +454,7 @@ mod tests {
     #[test]
     fn track_touch_jumps_and_close_button_closes() {
         let mut input = interpreter();
-        feed(&mut input, &frame(0, false, &[(1, 1_240)]));
+        feed(&mut input, &frame(0, false, &[(1, 1_100)]));
         feed(&mut input, &frame(10, false, &[]));
         assert_eq!(input.surface(), Surface::Slider(SliderKind::Display));
         let outcome = feed(&mut input, &frame(20, false, &[(2, 1_960)]));
@@ -439,13 +487,14 @@ mod tests {
             now_playing: true,
             seekable: true,
             microphone: false,
+            outputs: 0,
         });
         feed(&mut input, &frame(0, false, &[(1, 900)]));
         let outcome = feed(&mut input, &frame(30, false, &[]));
         assert_eq!(outcome.actions, vec![Action::NowPlayingToggle]);
 
         feed(&mut input, &frame(100, false, &[(2, 700)]));
-        let moving = feed(&mut input, &frame(110, false, &[(2, 916)]));
+        let moving = feed(&mut input, &frame(110, false, &[(2, 848)]));
         assert!(moving.actions.is_empty(), "seek waits for the release");
         assert!((input.scrub().unwrap() - 0.5).abs() < 1e-9);
         let release = feed(&mut input, &frame(120, false, &[]));
@@ -454,9 +503,33 @@ mod tests {
     }
 
     #[test]
+    fn output_picker_opens_selects_and_closes() {
+        let mut input = interpreter();
+        input.set_contextual(Contextual {
+            now_playing: false,
+            seekable: false,
+            microphone: false,
+            outputs: 2,
+        });
+        feed(&mut input, &frame(0, false, &[(1, 1_830)]));
+        feed(&mut input, &frame(30, false, &[]));
+        assert_eq!(input.surface(), Surface::Outputs);
+        feed(&mut input, &frame(60, false, &[(2, 900)]));
+        let outcome = feed(&mut input, &frame(90, false, &[]));
+        assert_eq!(outcome.actions, vec![Action::SelectOutput(1)]);
+        assert_eq!(input.surface(), Surface::Normal);
+
+        feed(&mut input, &frame(200, false, &[(3, 1_830)]));
+        feed(&mut input, &frame(230, false, &[]));
+        assert!(!input.expire_outputs(Duration::from_millis(1_000)));
+        assert!(input.expire_outputs(Duration::from_millis(4_300)));
+        assert_eq!(input.surface(), Surface::Normal);
+    }
+
+    #[test]
     fn media_tap_does_not_reach_a_slider() {
         let mut input = interpreter();
-        feed(&mut input, &frame(0, false, &[(1, 1_670)]));
+        feed(&mut input, &frame(0, false, &[(1, 1_540)]));
         let outcome = feed(&mut input, &frame(30, false, &[]));
         assert_eq!(outcome.actions, vec![Action::MediaPlayPause]);
         assert_eq!(input.surface(), Surface::Normal);

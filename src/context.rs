@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::audio::{self, Audio, Microphone};
+use crate::audio::{self, Audio, Microphone, Output};
 use crate::mpris::{self, NowPlaying};
 use crate::screen;
 
@@ -22,6 +22,8 @@ const MPRIS_FALLBACK: Duration = Duration::from_secs(10);
 const AUDIO_INTERVAL: Duration = Duration::from_secs(2);
 const AUDIO_FAST_INTERVAL: Duration = Duration::from_millis(300);
 const MICROPHONE_INTERVAL: Duration = Duration::from_secs(1);
+/// Output list refresh without a request (plugging a dock changes it).
+const OUTPUTS_INTERVAL: Duration = Duration::from_secs(10);
 /// Lock state also re-read without signals, in case one is missed.
 const SCREEN_FALLBACK: Duration = Duration::from_secs(15);
 /// Signals come in bursts (several properties at once); coalesce them.
@@ -37,6 +39,8 @@ pub struct Snapshot {
     pub microphone: Option<Microphone>,
     /// The screen is locked or the monitors are off.
     pub screen_off: bool,
+    /// Audio outputs for the picker.
+    pub outputs: Vec<Output>,
 }
 
 impl Snapshot {
@@ -50,6 +54,7 @@ impl Snapshot {
             && self.audio == other.audio
             && self.microphone == other.microphone
             && self.screen_off == other.screen_off
+            && self.outputs == other.outputs
     }
 }
 
@@ -59,6 +64,7 @@ struct Parts {
     audio: bool,
     microphone: bool,
     screen: bool,
+    outputs: bool,
 }
 
 const PLAYERS: Parts = Parts {
@@ -66,24 +72,35 @@ const PLAYERS: Parts = Parts {
     audio: false,
     microphone: false,
     screen: false,
+    outputs: false,
 };
 const AUDIO: Parts = Parts {
     players: false,
     audio: true,
     microphone: false,
     screen: false,
+    outputs: false,
 };
 const MICROPHONE: Parts = Parts {
     players: false,
     audio: false,
     microphone: true,
     screen: false,
+    outputs: false,
+};
+const OUTPUTS: Parts = Parts {
+    players: false,
+    audio: true,
+    microphone: false,
+    screen: false,
+    outputs: true,
 };
 const SCREEN: Parts = Parts {
     players: false,
     audio: false,
     microphone: false,
     screen: true,
+    outputs: false,
 };
 
 /// Handle to the poller; cheap to clone.
@@ -155,6 +172,15 @@ impl Context {
         let _ = self.volume.send(percent);
     }
 
+    /// Re-reads the output list now (the picker is opening).
+    pub fn refresh_outputs(&self) {
+        let _ = self.refresh.send(OUTPUTS);
+    }
+
+    pub fn set_output(&self, id: u32) {
+        self.command(OUTPUTS, move || audio::set_output(id));
+    }
+
     pub fn toggle_output_mute(&self) {
         self.command(AUDIO, audio::toggle_output_mute);
     }
@@ -205,6 +231,7 @@ fn poll_forever(shared: &Mutex<(u64, Snapshot)>, requests: &Receiver<Parts>, fas
     let start = Instant::now();
     let (mut next_players, mut next_audio, mut next_microphone, mut next_screen) =
         (start, start, start, start);
+    let mut next_outputs = start;
     loop {
         let now = Instant::now();
         if now >= next_players {
@@ -224,6 +251,10 @@ fn poll_forever(shared: &Mutex<(u64, Snapshot)>, requests: &Receiver<Parts>, fas
             snapshot.microphone = audio::microphone();
             next_microphone = now + MICROPHONE_INTERVAL;
         }
+        if now >= next_outputs {
+            snapshot.outputs = audio::outputs();
+            next_outputs = now + OUTPUTS_INTERVAL;
+        }
         if now >= next_screen {
             snapshot.screen_off = screen::off();
             next_screen = now + SCREEN_FALLBACK;
@@ -238,7 +269,8 @@ fn poll_forever(shared: &Mutex<(u64, Snapshot)>, requests: &Receiver<Parts>, fas
         let deadline = next_players
             .min(next_audio)
             .min(next_microphone)
-            .min(next_screen);
+            .min(next_screen)
+            .min(next_outputs);
         match requests.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
             Ok(first) => {
                 thread::sleep(DEBOUNCE);
@@ -248,6 +280,7 @@ fn poll_forever(shared: &Mutex<(u64, Snapshot)>, requests: &Receiver<Parts>, fas
                     parts.audio |= more.audio;
                     parts.microphone |= more.microphone;
                     parts.screen |= more.screen;
+                    parts.outputs |= more.outputs;
                 }
                 let now = Instant::now();
                 if parts.players {
@@ -261,6 +294,9 @@ fn poll_forever(shared: &Mutex<(u64, Snapshot)>, requests: &Receiver<Parts>, fas
                 }
                 if parts.screen {
                     next_screen = now;
+                }
+                if parts.outputs {
+                    next_outputs = now;
                 }
             }
             Err(RecvTimeoutError::Timeout) => {}
