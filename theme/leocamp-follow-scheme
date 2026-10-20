@@ -2,15 +2,24 @@
 # Keeps the Shell theme and icons in step with GNOME's light/dark style
 # (GTK and wallpaper follow it natively). Run by leocamp-scheme.service.
 
-# Icone: WhiteSur rosa se installate (vinceliuice/WhiteSur-icon-theme,
-# "install.sh -t pink"), altrimenti Papirus con cartelle magenta.
-if [ -d "$HOME/.local/share/icons/WhiteSur-pink" ]; then
-	LIGHT_ICONS=WhiteSur-pink DARK_ICONS=WhiteSur-pink-dark
-else
-	LIGHT_ICONS=LeoCamp-Papirus DARK_ICONS=LeoCamp-Papirus-Dark
-fi
+# Icon set chosen with theme/leocamp-icons (whitesur, colloid, candy,
+# papirus), stored in ~/.config/leocamp/icons.
+icons_for() {
+	choice=$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/leocamp/icons" 2>/dev/null)
+	case "$choice" in
+	colloid) LIGHT_ICONS=Colloid-Pink-Light DARK_ICONS=Colloid-Pink-Dark ;;
+	candy) LIGHT_ICONS=candy-icons DARK_ICONS=candy-icons ;;
+	papirus) LIGHT_ICONS=LeoCamp-Papirus DARK_ICONS=LeoCamp-Papirus-Dark ;;
+	*) if [ -d "$HOME/.local/share/icons/WhiteSur-pink" ]; then
+		LIGHT_ICONS=WhiteSur-pink DARK_ICONS=WhiteSur-pink-dark
+	else
+		LIGHT_ICONS=LeoCamp-Papirus DARK_ICONS=LeoCamp-Papirus-Dark
+	fi ;;
+	esac
+}
 
 apply() {
+	icons_for
 	case "$(gsettings get org.gnome.desktop.interface color-scheme)" in
 	*dark*) shell=LeoCamp-Dark icons=$DARK_ICONS ;;
 	*) shell=LeoCamp icons=$LIGHT_ICONS ;;

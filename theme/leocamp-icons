@@ -1,0 +1,11 @@
+#!/bin/sh
+# Switches the Leo Camp icon set: leocamp-icons whitesur|colloid|candy|papirus
+set -eu
+case "${1:-}" in
+whitesur | colloid | candy | papirus) ;;
+*) echo "uso: leocamp-icons whitesur|colloid|candy|papirus"; exit 1 ;;
+esac
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/leocamp"
+echo "$1" >"${XDG_CONFIG_HOME:-$HOME/.config}/leocamp/icons"
+systemctl --user restart leocamp-scheme.service
+echo "icone: $1"
