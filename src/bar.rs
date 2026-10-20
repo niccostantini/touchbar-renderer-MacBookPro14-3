@@ -84,7 +84,11 @@ const CUSTOM_ICON: u32 = 30;
 // Now playing: title line and a thin progress bar, shown while a player has
 // a track, centred in the free space between the custom buttons (the
 // microphone one only while recording) and the brightness group.
-const NOW_PLAYING_MARGIN: u32 = 22;
+const NOW_PLAYING_MARGIN: u32 = 64;
+/// Previous/next zones at the ends of the now-playing block.
+const SKIP_WIDTH: u32 = 92;
+/// The small play glyph before a paused title.
+const PAUSED_GLYPH: u32 = 30;
 const NOW_PLAYING_TEXT_HEIGHT: u32 = 42;
 const NOW_PLAYING_FONT: u32 = 23;
 const PROGRESS_Y: u32 = 46;
@@ -94,11 +98,8 @@ const MARQUEE_GAP: u32 = 90;
 
 // Normal strip, right-aligned like the macOS Control Strip: brightness group,
 // media group, audio group.
-const DISPLAY_BUTTON: Span = Span { x: 1_044, width: 130 };
-const KEYBOARD_BUTTON: Span = Span { x: 1_180, width: 130 };
-const PREVIOUS_BUTTON: Span = Span { x: 1_338, width: 130 };
-const PLAY_PAUSE_BUTTON: Span = Span { x: 1_474, width: 130 };
-const NEXT_BUTTON: Span = Span { x: 1_610, width: 130 };
+const DISPLAY_BUTTON: Span = Span { x: 1_474, width: 130 };
+const KEYBOARD_BUTTON: Span = Span { x: 1_610, width: 130 };
 const OUTPUTS_BUTTON: Span = Span { x: 1_768, width: 130 };
 const MUTE_BUTTON: Span = Span { x: 1_904, width: 130 };
 const VOLUME_BUTTON: Span = Span { x: 2_040, width: 130 };
@@ -312,10 +313,27 @@ impl Bar {
         }
     }
 
+    /// The title and progress, between the previous and next zones.
+    fn now_playing_title_span(self) -> Span {
+        let span = self.now_playing_span();
+        Span {
+            x: span.x + SKIP_WIDTH,
+            width: span.width.saturating_sub(2 * SKIP_WIDTH).max(1),
+        }
+    }
+
+    fn skip_span(self, next: bool) -> Span {
+        let span = self.now_playing_span();
+        Span {
+            x: if next { span.x + span.width - SKIP_WIDTH } else { span.x },
+            width: SKIP_WIDTH,
+        }
+    }
+
     /// Width available to the now-playing label, in display pixels.
     #[must_use]
     pub fn now_playing_label_width(self) -> u32 {
-        self.scaled_x(self.now_playing_span().width).max(1)
+        self.scaled_x(self.now_playing_title_span().width).max(1)
     }
 
     #[must_use]
@@ -364,13 +382,13 @@ impl Bar {
             return Ok(());
         };
         frame.fill_rectangle(self.span_bounds(self.now_playing_span()), BACKGROUND)?;
-        self.render_now_playing(frame, &now_playing, view.pressed == Some(Target::NowPlaying))
+        self.render_now_playing(frame, &now_playing, view.pressed)
     }
 
     /// Maps a display x coordinate to a position in the shown track.
     #[must_use]
     pub fn now_playing_fraction(self, x: f64) -> f64 {
-        let left = f64::from(self.scaled_x(self.now_playing_span().x));
+        let left = f64::from(self.scaled_x(self.now_playing_title_span().x));
         let width = f64::from(self.now_playing_label_width());
         ((x - left) / width).clamp(0.0, 1.0)
     }
@@ -427,7 +445,13 @@ impl Bar {
                     return Some(Target::Action(Action::Escape));
                 }
                 if self.contextual.now_playing && self.within_span(self.now_playing_span(), x) {
-                    return Some(Target::NowPlaying);
+                    return Some(if self.within_span(self.skip_span(false), x) {
+                        Target::Action(Action::MediaPrevious)
+                    } else if self.within_span(self.skip_span(true), x) {
+                        Target::Action(Action::MediaNext)
+                    } else {
+                        Target::NowPlaying
+                    });
                 }
                 self.normal_items()
                     .into_iter()
@@ -578,7 +602,7 @@ impl Bar {
             }
         }
         if let Some(now_playing) = view.now_playing {
-            self.render_now_playing(frame, &now_playing, view.pressed == Some(Target::NowPlaying))?;
+            self.render_now_playing(frame, &now_playing, view.pressed)?;
         }
         Ok(())
     }
@@ -587,11 +611,22 @@ impl Bar {
         self,
         frame: &mut Xrgb8888Frame<'_>,
         now_playing: &NowPlayingView<'_>,
-        pressed: bool,
+        pressed: Option<Target>,
     ) -> Result<(), BarError> {
-        let area = self.span_bounds(self.now_playing_span());
-        if pressed {
-            self.draw_plate(frame, area, PLATE)?;
+        // Previous and next sit at the ends of the block, icon only.
+        for (next, action, symbol) in [
+            (false, Action::MediaPrevious, Symbol::Previous),
+            (true, Action::MediaNext, Symbol::Next),
+        ] {
+            let zone = self.span_bounds(self.skip_span(next));
+            if pressed == Some(Target::Action(action)) {
+                self.draw_plate(frame, zone, PRESSED_PLATE)?;
+            }
+            stock_art::draw_symbol(frame, zone, symbol, MAGENTA)?;
+        }
+        let full = self.span_bounds(self.now_playing_title_span());
+        if pressed == Some(Target::NowPlaying) {
+            self.draw_plate(frame, full, PLATE)?;
         }
         let label = now_playing.label;
         let text_height = if now_playing.progress.is_some() {
@@ -604,14 +639,31 @@ impl Bar {
         } else {
             PAUSED_LABEL
         };
+        // Paused: a small play glyph right before the grey title. When the
+        // title scrolls, the glyph keeps the block's left edge.
+        let glyph = if now_playing.playing {
+            0
+        } else {
+            self.scaled_x(PAUSED_GLYPH).min(full.width / 4)
+        };
         let valid = label.width > 0
             && label.height <= self.height
             && label.pixels.len() == (label.width * label.height) as usize;
         let top = text_height.saturating_sub(label.height) / 2;
-        if valid && label.width <= area.width {
+        let glyph_box = |x: u32| Rectangle {
+            x,
+            y: 0,
+            width: glyph,
+            height: text_height.min(self.height),
+        };
+        if valid && label.width + glyph <= full.width {
+            let x = full.x + (full.width - label.width - glyph) / 2;
+            if glyph > 0 {
+                draw_play_glyph(frame, glyph_box(x), MAGENTA)?;
+            }
             frame.blend_mask(
                 Rectangle {
-                    x: area.x + (area.width - label.width) / 2,
+                    x: x + glyph,
                     y: top,
                     width: label.width,
                     height: label.height,
@@ -620,18 +672,23 @@ impl Bar {
                 color,
             )?;
         } else if valid {
-            let window = marquee_window(label, area.width, now_playing.scroll, self.marquee_period(label.width));
+            if glyph > 0 {
+                draw_play_glyph(frame, glyph_box(full.x), MAGENTA)?;
+            }
+            let width = full.width - glyph;
+            let window = marquee_window(label, width, now_playing.scroll, self.marquee_period(label.width));
             frame.blend_mask(
                 Rectangle {
-                    x: area.x,
+                    x: full.x + glyph,
                     y: top,
-                    width: area.width,
+                    width,
                     height: label.height,
                 },
                 &window,
                 color,
             )?;
         }
+        let area = full;
         if let Some(progress) = now_playing.progress {
             let inset = self.scaled_x(16);
             let track = Rectangle {
@@ -755,7 +812,7 @@ impl Bar {
         }
     }
 
-    fn normal_items(self) -> [(Target, Span); 12] {
+    fn normal_items(self) -> [(Target, Span); 9] {
         [
             (Target::Action(Action::Screenshot), SCREENSHOT_BUTTON),
             (Target::Action(Action::LockScreen), LOCK_BUTTON),
@@ -763,9 +820,6 @@ impl Bar {
             (Target::Action(Action::ToggleMicrophone), MICROPHONE_BUTTON),
             (Target::SliderButton(SliderKind::Display), DISPLAY_BUTTON),
             (Target::SliderButton(SliderKind::Keyboard), KEYBOARD_BUTTON),
-            (Target::Action(Action::MediaPrevious), PREVIOUS_BUTTON),
-            (Target::Action(Action::MediaPlayPause), PLAY_PAUSE_BUTTON),
-            (Target::Action(Action::MediaNext), NEXT_BUTTON),
             (Target::OutputsButton, OUTPUTS_BUTTON),
             (Target::Action(Action::ToggleMute), MUTE_BUTTON),
             (Target::SliderButton(SliderKind::Volume), VOLUME_BUTTON),
@@ -869,6 +923,24 @@ const fn normal_symbol(target: Target) -> Symbol {
         | Target::NowPlaying
         | Target::OutputsButton => Symbol::VolumeUp,
     }
+}
+
+/// A small right-pointing triangle centred in `bounds`.
+fn draw_play_glyph(frame: &mut Xrgb8888Frame<'_>, bounds: Rectangle, color: Rgb) -> Result<(), BarError> {
+    let size = (bounds.height * 2 / 5).min(bounds.width).max(2);
+    let area = Rectangle {
+        x: bounds.x + (bounds.width - size) / 2,
+        y: bounds.y + (bounds.height - size) / 2,
+        width: size,
+        height: size,
+    };
+    let extent = f64::from(size);
+    let mask = crate::art::stock_art::rasterize(size, size, |x, y| {
+        let (u, v) = (x / extent, y / extent);
+        u >= 0.15 && v >= 0.1 + (u - 0.15) * 0.47 && v <= 0.9 - (u - 0.15) * 0.47
+    });
+    frame.blend_mask(area, &mask, color)?;
+    Ok(())
 }
 
 /// The `width`-pixel slice of a label scrolled by `scroll`, with the label
@@ -1082,15 +1154,15 @@ mod tests {
         // Contextual elements are inert until present.
         assert_eq!(at(600), None);
         assert_eq!(at(800), None);
-        assert_eq!(at(1_100), Some(Target::SliderButton(SliderKind::Display)));
-        assert_eq!(at(1_240), Some(Target::SliderButton(SliderKind::Keyboard)));
-        assert_eq!(at(1_540), Some(Target::Action(Action::MediaPlayPause)));
+        assert_eq!(at(1_100), None, "now playing is absent");
+        assert_eq!(at(1_500), Some(Target::SliderButton(SliderKind::Display)));
+        assert_eq!(at(1_650), Some(Target::SliderButton(SliderKind::Keyboard)));
         // The outputs button needs at least one listed output.
         assert_eq!(at(1_830), None);
         assert_eq!(at(1_960), Some(Target::Action(Action::ToggleMute)));
         assert_eq!(at(2_169), Some(Target::SliderButton(SliderKind::Volume)));
         // Gaps between plates are inert.
-        assert_eq!(at(1_312), None);
+        assert_eq!(at(1_606), None);
 
         let bar = bar.with_contextual(Contextual {
             now_playing: true,
@@ -1106,8 +1178,12 @@ mod tests {
         assert_eq!(pick(900), Some(Target::Action(Action::SelectOutput(1))));
         assert_eq!(pick(2_000), None);
         assert_eq!(at(600), Some(Target::Action(Action::ToggleMicrophone)));
-        assert_eq!(at(800), Some(Target::NowPlaying));
-        assert!((bar.now_playing_fraction(680.0 + 171.0) - 0.5).abs() < 1e-9);
+        // Block 722..1410: previous and next at the ends, title between.
+        assert_eq!(at(760), Some(Target::Action(Action::MediaPrevious)));
+        assert_eq!(at(1_000), Some(Target::NowPlaying));
+        assert_eq!(at(1_380), Some(Target::Action(Action::MediaNext)));
+        assert_eq!(at(1_440), None, "padding before the brightness group");
+        assert!((bar.now_playing_fraction(1_066.0) - 0.5).abs() < 1e-9);
     }
 
     #[test]

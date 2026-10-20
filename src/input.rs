@@ -454,7 +454,7 @@ mod tests {
     #[test]
     fn track_touch_jumps_and_close_button_closes() {
         let mut input = interpreter();
-        feed(&mut input, &frame(0, false, &[(1, 1_100)]));
+        feed(&mut input, &frame(0, false, &[(1, 1_500)]));
         feed(&mut input, &frame(10, false, &[]));
         assert_eq!(input.surface(), Surface::Slider(SliderKind::Display));
         let outcome = feed(&mut input, &frame(20, false, &[(2, 1_960)]));
@@ -494,7 +494,7 @@ mod tests {
         assert_eq!(outcome.actions, vec![Action::NowPlayingToggle]);
 
         feed(&mut input, &frame(100, false, &[(2, 700)]));
-        let moving = feed(&mut input, &frame(110, false, &[(2, 792)]));
+        let moving = feed(&mut input, &frame(110, false, &[(2, 1_007)]));
         assert!(moving.actions.is_empty(), "seek waits for the release");
         assert!((input.scrub().unwrap() - 0.5).abs() < 1e-9);
         let release = feed(&mut input, &frame(120, false, &[]));
@@ -529,9 +529,15 @@ mod tests {
     #[test]
     fn media_tap_does_not_reach_a_slider() {
         let mut input = interpreter();
-        feed(&mut input, &frame(0, false, &[(1, 1_540)]));
+        input.set_contextual(Contextual {
+            now_playing: true,
+            seekable: true,
+            microphone: false,
+            outputs: 0,
+        });
+        feed(&mut input, &frame(0, false, &[(1, 650)]));
         let outcome = feed(&mut input, &frame(30, false, &[]));
-        assert_eq!(outcome.actions, vec![Action::MediaPlayPause]);
+        assert_eq!(outcome.actions, vec![Action::MediaPrevious]);
         assert_eq!(input.surface(), Surface::Normal);
     }
 }
