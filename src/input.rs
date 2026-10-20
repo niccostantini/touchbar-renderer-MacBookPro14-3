@@ -16,6 +16,9 @@ use t1_touchbar_hw::wire::{self, InputContact, WireInputFrame};
 use crate::bar::{Action, Bar, Contextual, SliderKind, Surface, Target};
 use crate::slider::{AUTO_CLOSE_AFTER, SliderState};
 
+/// The lock key must be held this long; a shorter touch does nothing.
+pub const LOCK_HOLD: Duration = Duration::from_millis(1_800);
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InputError;
 
@@ -44,6 +47,8 @@ pub struct InputInterpreter {
     scrub: Option<(ContactId, Option<f64>)>,
     /// Last activity while the audio output picker is open.
     outputs_open: Option<Duration>,
+    /// Contact holding the lock key, and when it started.
+    lock_hold: Option<(ContactId, Duration)>,
 }
 
 impl InputInterpreter {
@@ -66,6 +71,7 @@ impl InputInterpreter {
             slider: SliderState::default(),
             scrub: None,
             outputs_open: None,
+            lock_hold: None,
         })
     }
 
@@ -86,6 +92,23 @@ impl InputInterpreter {
     #[must_use]
     pub fn is_idle(&self) -> bool {
         !self.wait_for_touch_release && self.gestures.is_idle()
+    }
+
+    /// Fill of the hold-to-lock bar, 0.0..=1.0, while the key is held.
+    #[must_use]
+    pub fn lock_progress(&self, now: Duration) -> Option<f64> {
+        self.lock_hold.map(|(_, since)| {
+            (now.saturating_sub(since).as_secs_f64() / LOCK_HOLD.as_secs_f64()).min(1.0)
+        })
+    }
+
+    /// True once when the hold completes; the hold then ends.
+    pub fn take_lock(&mut self, now: Duration) -> bool {
+        let done = self.lock_progress(now).is_some_and(|progress| progress >= 1.0);
+        if done {
+            self.lock_hold = None;
+        }
+        done
     }
 
     #[must_use]
@@ -244,6 +267,18 @@ impl InputInterpreter {
         }
         self.press_targets
             .retain(|id, _| contacts.iter().any(|contact| contact.id() == *id));
+        // The hold ends when the finger lifts or slides off the lock key.
+        if let Some((holder, _)) = self.lock_hold {
+            let still_on_key = contacts.iter().any(|contact| {
+                contact.id() == holder
+                    && self.bar.target_at(contact.x(), contact.y(), self.surface())
+                        == Some(Target::Action(Action::LockScreen))
+            });
+            if !still_on_key {
+                self.lock_hold = None;
+                outcome.redraw = true;
+            }
+        }
 
         let surface = self.surface();
         let pressed = contacts
@@ -281,6 +316,10 @@ impl InputInterpreter {
                 self.slider.begin_relative(contact.id(), contact.x());
                 outcome.redraw = true;
             }
+            Target::Action(Action::LockScreen) => {
+                self.lock_hold = Some((contact.id(), now));
+                outcome.redraw = true;
+            }
             Target::NowPlaying => {
                 if self.bar.contextual().seekable && self.scrub.is_none() {
                     self.scrub = Some((contact.id(), None));
@@ -315,6 +354,8 @@ impl InputInterpreter {
             return;
         }
         match target {
+            // Locking needs the full hold, never a tap.
+            Target::Action(Action::LockScreen) => {}
             Target::Action(action) => {
                 self.slider.touch(now);
                 if matches!(action, Action::SelectOutput(_)) {
@@ -356,6 +397,7 @@ impl InputInterpreter {
         self.press_targets.clear();
         self.pressed = None;
         self.scrub = None;
+        self.lock_hold = None;
         self.slider.close();
         self.close_outputs();
     }
@@ -524,6 +566,34 @@ mod tests {
         assert!(!input.expire_outputs(Duration::from_millis(1_000)));
         assert!(input.expire_outputs(Duration::from_millis(4_300)));
         assert_eq!(input.surface(), Surface::Normal);
+    }
+
+    #[test]
+    fn lock_needs_a_full_hold_on_the_key() {
+        let mut input = interpreter();
+        // A tap does nothing.
+        feed(&mut input, &frame(0, false, &[(1, 360)]));
+        let outcome = feed(&mut input, &frame(40, false, &[]));
+        assert!(outcome.actions.is_empty());
+        assert_eq!(input.lock_progress(Duration::from_millis(50)), None);
+
+        // Lifting early cancels.
+        feed(&mut input, &frame(100, false, &[(2, 360)]));
+        assert!(input.lock_progress(Duration::from_millis(1_000)).unwrap() > 0.4);
+        feed(&mut input, &frame(1_000, false, &[]));
+        assert!(!input.take_lock(Duration::from_millis(3_000)));
+
+        // Sliding off the key cancels.
+        feed(&mut input, &frame(3_000, false, &[(3, 360)]));
+        feed(&mut input, &frame(3_100, false, &[(3, 900)]));
+        assert_eq!(input.lock_progress(Duration::from_millis(3_200)), None);
+        feed(&mut input, &frame(3_200, false, &[]));
+
+        // A full hold locks once.
+        feed(&mut input, &frame(5_000, false, &[(4, 360)]));
+        assert!(!input.take_lock(Duration::from_millis(6_700)));
+        assert!(input.take_lock(Duration::from_millis(6_800)));
+        assert!(!input.take_lock(Duration::from_millis(6_900)));
     }
 
     #[test]

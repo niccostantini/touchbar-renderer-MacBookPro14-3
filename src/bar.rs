@@ -93,6 +93,8 @@ const NOW_PLAYING_TEXT_HEIGHT: u32 = 42;
 const NOW_PLAYING_FONT: u32 = 23;
 const PROGRESS_Y: u32 = 46;
 const PROGRESS_HEIGHT: u32 = 4;
+/// Thickness of the hold-to-lock bar.
+const LOCK_BAR_HEIGHT: u32 = 16;
 /// Blank space between the end of a scrolling title and its next start.
 const MARQUEE_GAP: u32 = 90;
 
@@ -213,6 +215,8 @@ pub struct View<'a> {
     /// Pre-rendered output names for the picker, and the active one.
     pub outputs: &'a [TextMask],
     pub active_output: Option<usize>,
+    /// Hold-to-lock fill, shown in place of the now-playing block.
+    pub lock_progress: Option<f64>,
     /// Slider position, 0.0..=1.0, used only on the slider surface.
     pub fraction: f64,
 }
@@ -601,10 +605,26 @@ impl Bar {
                 None => stock_art::draw_symbol(frame, bounds, normal_symbol(target), tint)?,
             }
         }
-        if let Some(now_playing) = view.now_playing {
+        if let Some(progress) = view.lock_progress {
+            self.render_lock_hold(frame, progress)?;
+        } else if let Some(now_playing) = view.now_playing {
             self.render_now_playing(frame, &now_playing, view.pressed)?;
         }
         Ok(())
+    }
+
+    /// The hold-to-lock bar across the whole now-playing block.
+    fn render_lock_hold(self, frame: &mut Xrgb8888Frame<'_>, progress: f64) -> Result<(), BarError> {
+        let span = self.span_bounds(self.now_playing_span());
+        let thickness = self.scaled_y(LOCK_BAR_HEIGHT).max(2);
+        let track = Rectangle {
+            x: span.x,
+            y: (self.height - thickness) / 2,
+            width: span.width,
+            height: thickness,
+        };
+        draw_track(frame, track, 1.0, TRACK_EMPTY, TRACK_EMPTY)?;
+        draw_gradient_fill(frame, track, progress, OUTPUT_GRADIENT)
     }
 
     fn render_now_playing(
@@ -1267,6 +1287,7 @@ mod tests {
                         }),
                         outputs: &outputs,
                         active_output: Some(1),
+                        lock_progress: (surface == Surface::Normal).then_some(fraction),
                         fraction,
                     };
                     bar.render(&mut frame, &view)

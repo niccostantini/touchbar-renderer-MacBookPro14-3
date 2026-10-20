@@ -50,6 +50,10 @@ Scelta dell'uscita audio (quella attiva nel gradiente):
 
 ![Uscite audio](docs/img/8-uscite-audio.png)
 
+Tenendo premuto il lucchetto per 1,8 secondi la barra si riempie e blocca lo schermo (staccando prima non succede nulla):
+
+![Tieni premuto per bloccare](docs/img/9-tieni-premuto-per-bloccare.png)
+
 Le immagini si rigenerano con `cargo run --release --bin preview -- docs/img`.
 
 ## Installazione

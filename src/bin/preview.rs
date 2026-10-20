@@ -25,6 +25,7 @@ struct Scene {
     playing: Option<bool>,
     long_title: bool,
     scroll: u32,
+    lock: Option<f64>,
     fraction: f64,
 }
 
@@ -39,6 +40,7 @@ const fn scene(name: &'static str, surface: Surface) -> Scene {
         playing: Some(true),
         long_title: false,
         scroll: 0,
+        lock: None,
         fraction: 0.0,
     }
 }
@@ -108,6 +110,11 @@ fn main() {
         Scene { fraction: 0.8, ..scene("6-slider-tastiera", Surface::Slider(SliderKind::Keyboard)) },
         Scene { fraction: 0.62, ..scene("7-slider-volume", Surface::Slider(SliderKind::Volume)) },
         Scene { playing: None, ..scene("8-uscite-audio", Surface::Outputs) },
+        Scene {
+            lock: Some(0.55),
+            pressed: Some(Target::Action(Action::LockScreen)),
+            ..scene("9-tieni-premuto-per-bloccare", Surface::Normal)
+        },
     ];
     for scene in scenes {
         let bar = base.with_contextual(Contextual {
@@ -135,6 +142,7 @@ fn main() {
                 }),
                 outputs: &output_labels,
                 active_output: Some(0),
+                lock_progress: scene.lock,
                 fraction: scene.fraction,
             },
         )

@@ -549,6 +549,7 @@ impl Session {
             || self.input.scrub().is_some()
             || self.input.outputs_open()
             || self.crossfade.is_some()
+            || self.input.lock_progress(self.now).is_some()
             || self
                 .label
                 .as_ref()
@@ -702,6 +703,7 @@ impl Session {
                 .iter()
                 .take(MAX_OUTPUTS)
                 .position(|output| output.active),
+            lock_progress: self.input.lock_progress(self.now),
             fraction: self.input.slider().fraction(),
         };
         if partial {
@@ -784,6 +786,13 @@ impl Session {
         self.dirty |= self.input.slider_mut().expire(now);
         self.advance_context();
         self.advance_marquee(now);
+        if self.input.lock_progress(now).is_some() {
+            self.dirty = true;
+        }
+        if self.input.take_lock(now) {
+            system::lock_screen();
+            self.dirty = true;
+        }
         self.dirty |= self.input.expire_outputs(now);
         let picker_open = self.input.outputs_open();
         if picker_open && !self.picker_was_open {
