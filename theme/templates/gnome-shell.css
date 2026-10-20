@@ -33,6 +33,22 @@ stage {
   font-weight: 700;
   font-size: 1.2em;
 }
+/* The overview makes the panel transparent over a dark backdrop, which
+   hid the ink-coloured clock: keep the panel solid there too. */
+#panel:overview {
+  background-color: %(bg)s;
+  border-bottom: 2px solid %(line)s;
+}
+#panel:overview .panel-button,
+#panel:overview .panel-button .clock {
+  color: %(ink)s;
+}
+#panel:overview .panel-button:active,
+#panel:overview .panel-button:checked,
+#panel:overview .panel-button:focus {
+  background-color: %(ink)s;
+  color: %(bg)s;
+}
 #panel .workspace-dot {
   background-color: %(ink)s;
 }
