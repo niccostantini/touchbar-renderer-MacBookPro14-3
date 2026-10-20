@@ -17,11 +17,11 @@ G1, G2 = "#f2369b", "#ff7b2e"  # magenta -> orange, as on brave.com/leo
 SHADOW = G1
 LIGHT = dict(
     bg="#fbf3e6", surface="#fffdf8", chip="#f4e7d6", hover="#efdcc6",
-    ink="#17111c", line="#17111c", track="#e5d3bf", accent="#6a2be8",
+    ink="#17111c", line="#17111c", muted="#7a6a80", track="#e5d3bf", accent="#6a2be8",
 )
 DARK = dict(
     bg="#120d16", surface="#1d1524", chip="#2a2032", hover="#3a2c45",
-    ink="#fbf3e6", line="#fbf3e6", track="#3a2c45", accent="#9c6bff",
+    ink="#fbf3e6", line="#fbf3e6", muted="#b9a9bf", track="#3a2c45", accent="#9c6bff",
 )
 
 

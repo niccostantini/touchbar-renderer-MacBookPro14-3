@@ -224,15 +224,21 @@ stage {
   background-color: %(hover)s;
   border-radius: 14px;
 }
-.search-entry {
+.search-entry,
+.search-entry:hover,
+.search-entry:focus {
   background-color: %(surface)s;
   color: %(ink)s;
   border: 2px solid %(line)s;
   border-radius: 999px;
-  box-shadow: 4px 4px 0 0 %(shadow)s;
+  /* No offset shadow here: St draws it with square corners under a pill. */
+  box-shadow: none;
 }
 .search-entry:focus {
   border-color: %(accent)s;
+}
+.search-entry StLabel.hint-text {
+  color: %(muted)s;
 }
 
 /* ---- Dock (Ubuntu Dock, bottom) ----------------------------------- */
