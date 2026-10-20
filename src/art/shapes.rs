@@ -99,7 +99,7 @@ pub(crate) fn draw_knob(
 /// Procedural icons for the custom buttons.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Icon {
-    Camera,
+    Crop,
     Padlock,
     Moon,
     Microphone,
@@ -130,11 +130,15 @@ pub(crate) fn draw_icon(
 fn icon_contains(icon: Icon, u: f64, v: f64) -> bool {
     let distance = |cx: f64, cy: f64| (u - cx).hypot(v - cy);
     match icon {
-        Icon::Camera => {
-            let body = rounded_rect(u, v, (0.04, 0.30, 0.96, 0.86), 0.12);
-            let bump = rounded_rect(u, v, (0.32, 0.17, 0.68, 0.34), 0.05);
-            let lens = distance(0.5, 0.58);
-            (body || bump) && !(0.12..=0.21).contains(&lens)
+        Icon::Crop => {
+            // Two interlocking crop corners, as in the usual crop/screenshot glyph.
+            let half = 0.055;
+            let bar = |a: f64, b: f64, fixed: f64, along: f64, across: f64| {
+                (a - half..=b + half).contains(&along) && (across - fixed).abs() <= half
+            };
+            let first = bar(0.06, 0.74, 0.28, v, u) || bar(0.28, 0.94, 0.74, u, v);
+            let second = bar(0.06, 0.74, 0.28, u, v) || bar(0.28, 0.94, 0.74, v, u);
+            first || second
         }
         Icon::Padlock => {
             let body = rounded_rect(u, v, (0.16, 0.44, 0.84, 0.96), 0.08);
@@ -193,7 +197,7 @@ mod tests {
     #[test]
     fn every_icon_and_degenerate_shape_rasterizes() {
         for icon in [
-            Icon::Camera,
+            Icon::Crop,
             Icon::Padlock,
             Icon::Moon,
             Icon::Microphone,

@@ -769,7 +769,7 @@ fn draw_gradient_fill(
 
 const fn custom_icon(target: Target) -> Option<Icon> {
     match target {
-        Target::Action(Action::Screenshot) => Some(Icon::Camera),
+        Target::Action(Action::Screenshot) => Some(Icon::Crop),
         Target::Action(Action::LockScreen) => Some(Icon::Padlock),
         Target::Action(Action::ToggleDoNotDisturb) => Some(Icon::Moon),
         Target::Action(Action::ToggleMicrophone) => Some(Icon::Microphone),
