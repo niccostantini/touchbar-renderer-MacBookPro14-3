@@ -93,3 +93,42 @@ scale highlight,
 progressbar > trough > progress {
   background-image: linear-gradient(90deg, %(g1)s, %(g2)s);
 }
+
+/* Camp traffic lights (macOS layout set by install.sh) */
+windowcontrols {
+  border-spacing: 8px;
+}
+windowcontrols > button {
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  margin: 0 1px;
+  border-radius: 999px;
+  border: 2px solid var(--leo-line);
+  box-shadow: 2px 2px 0 0 var(--leo-line);
+}
+windowcontrols > button > image {
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  color: transparent;
+  -gtk-icon-size: 10px;
+}
+windowcontrols > button:hover > image,
+windowcontrols > button:focus-visible > image {
+  color: %(l_ink)s;
+}
+windowcontrols > button.close { background: linear-gradient(135deg, %(g1)s, #ff4f6d); }
+windowcontrols > button.minimize { background: linear-gradient(135deg, #ffb02e, %(g2)s); }
+windowcontrols > button.maximize { background: linear-gradient(135deg, #9c6bff, %(l_accent)s); }
+windowcontrols > button:active {
+  box-shadow: none;
+  margin: 2px -1px -2px 3px;
+}
+window:backdrop windowcontrols > button {
+  background: %(l_chip)s;
+  box-shadow: none;
+}
+@media (prefers-color-scheme: dark) {
+  window:backdrop windowcontrols > button { background: %(d_chip)s; }
+}

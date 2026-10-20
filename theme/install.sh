@@ -25,6 +25,7 @@ if [ ! -e "$RESTORE" ]; then
 		for kv in \
 			"org.gnome.desktop.interface icon-theme" \
 			"org.gnome.desktop.interface accent-color" \
+			"org.gnome.desktop.wm.preferences button-layout" \
 			"org.gnome.desktop.background picture-uri" \
 			"org.gnome.desktop.background picture-uri-dark" \
 			"org.gnome.shell enabled-extensions" \
@@ -65,6 +66,7 @@ gsettings set org.gnome.desktop.background picture-uri "file://$DATA/backgrounds
 gsettings set org.gnome.desktop.background picture-uri-dark "file://$DATA/backgrounds/leocamp-dark.svg"
 gsettings set org.gnome.desktop.background picture-options zoom
 gsettings set org.gnome.desktop.interface accent-color purple
+gsettings set org.gnome.desktop.wm.preferences button-layout "close,minimize,maximize:appmenu"
 gsettings set $DOCK dock-position BOTTOM
 gsettings set $DOCK extend-height false
 gsettings set $DOCK dash-max-icon-size 44

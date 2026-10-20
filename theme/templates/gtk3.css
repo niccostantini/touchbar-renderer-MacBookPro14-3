@@ -8,3 +8,21 @@ headerbar .title {
   font-style: italic;
   font-weight: 700;
 }
+
+/* Camp traffic lights */
+headerbar button.titlebutton,
+.titlebar button.titlebutton {
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+  margin: 0 3px;
+  border-radius: 999px;
+  border: 2px solid #17111c;
+  box-shadow: 2px 2px 0 0 #17111c;
+  color: transparent;
+  -gtk-icon-shadow: none;
+}
+headerbar button.titlebutton:hover { color: #17111c; }
+headerbar button.titlebutton.close { background-image: linear-gradient(135deg, %(g1)s, #ff4f6d); }
+headerbar button.titlebutton.minimize { background-image: linear-gradient(135deg, #ffb02e, %(g2)s); }
+headerbar button.titlebutton.maximize { background-image: linear-gradient(135deg, #9c6bff, %(l_accent)s); }
