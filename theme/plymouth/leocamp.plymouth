@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Leo Camp
+Description=Leo Camp dark boot splash with a random camp greeting
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/leocamp
+ScriptFile=/usr/share/plymouth/themes/leocamp/leocamp.script
