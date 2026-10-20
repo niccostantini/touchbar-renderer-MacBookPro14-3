@@ -1,0 +1,76 @@
+
+/* ===== Leo Camp login screen (appended to Ubuntu's Yaru GDM theme) ===== */
+#lockDialogGroup {
+  background: #120d16 url("resource:///org/gnome/shell/theme/leocamp-gdm-bg.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.login-dialog {
+  background-color: transparent;
+  color: #fbf3e6;
+}
+.login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item {
+  background-color: #1d1524;
+  color: #fbf3e6;
+  border: 2px solid #fbf3e6;
+  border-radius: 18px;
+}
+.login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item:hover {
+  background-color: #2a2032;
+}
+.login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item:focus,
+.login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item:selected {
+  background-color: #2a2032;
+  border-color: #f2369b;
+}
+.user-widget-label {
+  font-family: "Noto Serif Display", serif;
+  font-style: italic;
+  font-weight: 800;
+  color: #fbf3e6;
+}
+.user-icon {
+  border: 3px solid #f2369b;
+}
+.login-dialog-prompt-entry {
+  background-color: #1d1524;
+  color: #fbf3e6;
+  border: 2px solid #fbf3e6;
+  border-radius: 999px;
+  selection-background-color: #f2369b;
+}
+.login-dialog-prompt-entry:focus {
+  border-color: #f2369b;
+}
+.login-dialog-prompt-entry StLabel.hint-text {
+  color: #b9a9bf;
+}
+.login-dialog-button.cancel-button,
+.login-dialog-button.switch-user-button,
+.login-dialog-button.a11y-button,
+.login-dialog-button.login-dialog-session-list-button,
+.login-dialog-button.login-dialog-auth-menu-button {
+  background-color: #1d1524;
+  color: #fbf3e6;
+  border: 2px solid #fbf3e6;
+}
+.login-dialog-button.cancel-button:hover,
+.login-dialog-button.switch-user-button:hover,
+.login-dialog-button.a11y-button:hover,
+.login-dialog-button.login-dialog-session-list-button:hover,
+.login-dialog-button.login-dialog-auth-menu-button:hover {
+  background-color: #3a2c45;
+}
+.login-dialog-not-listed-label {
+  color: #b9a9bf;
+}
+.login-dialog-message-warning,
+.caps-lock-warning-label {
+  color: #ff7b2e;
+}
+.unlock-dialog-clock-time {
+  font-family: "Noto Serif Display", serif;
+  font-style: italic;
+  font-weight: 800;
+}
