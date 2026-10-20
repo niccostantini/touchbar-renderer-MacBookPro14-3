@@ -10,7 +10,7 @@
   --view-fg-color: %(l_ink)s;
   --headerbar-bg-color: %(l_bg)s;
   --headerbar-fg-color: %(l_ink)s;
-  --headerbar-shade-color: %(l_ink)s;
+  --headerbar-shade-color: rgb(23 17 28 / 10%%);
   --sidebar-bg-color: %(l_chip)s;
   --sidebar-fg-color: %(l_ink)s;
   --secondary-sidebar-bg-color: %(l_chip)s;
@@ -33,7 +33,7 @@
     --view-fg-color: %(d_ink)s;
     --headerbar-bg-color: %(d_bg)s;
     --headerbar-fg-color: %(d_ink)s;
-    --headerbar-shade-color: %(d_line)s;
+    --headerbar-shade-color: rgb(0 0 0 / 36%%);
     --sidebar-bg-color: %(d_chip)s;
     --sidebar-fg-color: %(d_ink)s;
     --secondary-sidebar-bg-color: %(d_chip)s;
@@ -54,10 +54,6 @@ statuspage > scrolledwindow > viewport > box > .title {
   font-family: "Fraunces", serif;
   font-style: italic;
   font-weight: 700;
-}
-
-headerbar {
-  box-shadow: inset 0 -2px var(--leo-line);
 }
 
 /* Neo-brutalist cards */
