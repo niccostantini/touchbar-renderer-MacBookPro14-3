@@ -49,7 +49,8 @@ def build_css():
     for name, scheme, palette in (("LeoCamp", "light", LIGHT), ("LeoCamp-Dark", "dark", DARK)):
         out = DIST / "themes" / name / "gnome-shell"
         out.mkdir(parents=True, exist_ok=True)
-        values = dict(palette, variant=name, scheme=scheme, g1=G1, g2=G2, shadow=SHADOW)
+        yaru = "gnome-shell-dark.css" if scheme == "dark" else "gnome-shell.css"
+        values = dict(palette, variant=name, scheme=scheme, yaru=yaru, g1=G1, g2=G2, shadow=SHADOW)
         (out / "gnome-shell.css").write_text(fill("gnome-shell.css", values))
         (out / "leocamp-show-apps.svg").write_text(SHOW_APPS_ICON.replace("{ink}", palette["line"]))
     both = {f"l_{k}": v for k, v in LIGHT.items()}
