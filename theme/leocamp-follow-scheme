@@ -1,0 +1,15 @@
+#!/bin/sh
+# Keeps the Shell theme and icons in step with GNOME's light/dark style
+# (GTK and wallpaper follow it natively). Run by leocamp-scheme.service.
+
+apply() {
+	case "$(gsettings get org.gnome.desktop.interface color-scheme)" in
+	*dark*) shell=LeoCamp-Dark icons=LeoCamp-Papirus-Dark ;;
+	*) shell=LeoCamp icons=LeoCamp-Papirus ;;
+	esac
+	gsettings set org.gnome.shell.extensions.user-theme name "$shell" 2>/dev/null
+	gsettings set org.gnome.desktop.interface icon-theme "$icons"
+}
+
+apply
+gsettings monitor org.gnome.desktop.interface color-scheme | while read -r _; do apply; done

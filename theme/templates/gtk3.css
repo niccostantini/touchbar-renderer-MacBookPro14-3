@@ -1,0 +1,10 @@
+/* Leo Camp — GTK 3 accent only (Yaru stays the base). Generated. */
+@define-color theme_selected_bg_color %(l_accent)s;
+@define-color accent_bg_color %(l_accent)s;
+@define-color accent_color %(l_accent)s;
+
+headerbar .title {
+  font-family: "Fraunces", serif;
+  font-style: italic;
+  font-weight: 700;
+}

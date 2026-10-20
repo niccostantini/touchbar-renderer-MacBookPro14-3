@@ -84,3 +84,16 @@ Note di progetto:
 ## Licenza
 
 MIT. Parti derivate da t1bridge (MIT): vedi `LICENSE-t1bridge`.
+
+## Tema desktop "Leo Camp"
+
+Tema GNOME ispirato allo stile di brave.com/leo: crema e nero, serif da
+rivista (Fraunces), card con bordo spesso e ombra netta, gradiente
+magenta → arancio, accenti viola; variante scura automatica; dock in basso;
+icone Papirus con cartelle magenta; sfondi generati.
+
+```sh
+sudo apt install gnome-shell-extensions papirus-icon-theme   # una volta
+sh theme/install.sh                                          # poi logout/login
+sh ~/.config/leocamp/restore.sh                              # per tornare com'era
+```

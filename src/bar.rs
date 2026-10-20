@@ -18,13 +18,26 @@ const PLATE_RADIUS: u32 = 8;
 const BACKGROUND: Rgb = rgb(0);
 const PLATE: Rgb = rgb(53);
 const PRESSED_PLATE: Rgb = rgb(76);
-const ACTIVE_PLATE: Rgb = rgb(96);
+// Leo Camp accents (theme/build.py): violet toggles, magenta levels.
+const ACTIVE_PLATE: Rgb = Rgb {
+    red: 106,
+    green: 43,
+    blue: 232,
+};
 const LABEL: Rgb = rgb(242);
-const TRACK_FILLED: Rgb = rgb(210);
+const TRACK_FILLED: Rgb = Rgb {
+    red: 242,
+    green: 54,
+    blue: 155,
+};
 const TRACK_EMPTY: Rgb = rgb(72);
 const KNOB: Rgb = rgb(255);
 const PAUSED_LABEL: Rgb = rgb(150);
-const PROGRESS_FILLED: Rgb = rgb(200);
+const PROGRESS_FILLED: Rgb = Rgb {
+    red: 255,
+    green: 123,
+    blue: 46,
+};
 const PROGRESS_EMPTY: Rgb = rgb(60);
 const MICROPHONE_MUTED_PLATE: Rgb = Rgb {
     red: 176,

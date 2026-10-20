@@ -6,3 +6,4 @@
 *.sha256
 FDRData
 EMBEDDEDOS/
+/theme/dist
