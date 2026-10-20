@@ -494,7 +494,7 @@ mod tests {
         assert_eq!(outcome.actions, vec![Action::NowPlayingToggle]);
 
         feed(&mut input, &frame(100, false, &[(2, 700)]));
-        let moving = feed(&mut input, &frame(110, false, &[(2, 848)]));
+        let moving = feed(&mut input, &frame(110, false, &[(2, 792)]));
         assert!(moving.actions.is_empty(), "seek waits for the release");
         assert!((input.scrub().unwrap() - 0.5).abs() < 1e-9);
         let release = feed(&mut input, &frame(120, false, &[]));

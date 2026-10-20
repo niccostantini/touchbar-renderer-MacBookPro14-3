@@ -23,6 +23,8 @@ struct Scene {
     do_not_disturb: bool,
     microphone: Option<bool>,
     playing: Option<bool>,
+    long_title: bool,
+    scroll: u32,
     fraction: f64,
 }
 
@@ -35,6 +37,8 @@ const fn scene(name: &'static str, surface: Surface) -> Scene {
         do_not_disturb: false,
         microphone: None,
         playing: Some(true),
+        long_title: false,
+        scroll: 0,
         fraction: 0.0,
     }
 }
@@ -66,6 +70,12 @@ fn main() {
         probe.now_playing_label_width(),
         probe.now_playing_label_height(),
     );
+    let long_label = text.render(
+        "Express Yourself (Non-Stop Dance Remix) · Madonna",
+        probe.now_playing_font_size(),
+        6_000,
+        probe.now_playing_label_height(),
+    );
     let output_labels: Vec<_> = outputs
         .iter()
         .map(|name| {
@@ -80,6 +90,11 @@ fn main() {
     let scenes = [
         Scene { playing: None, ..scene("1-normale", Surface::Normal) },
         Scene { microphone: Some(false), ..scene("2-musica-e-microfono", Surface::Normal) },
+        Scene {
+            long_title: true,
+            scroll: 150,
+            ..scene("2b-titolo-lungo-che-scorre", Surface::Normal)
+        },
         Scene {
             muted: true,
             do_not_disturb: true,
@@ -113,9 +128,10 @@ fn main() {
                 do_not_disturb: scene.do_not_disturb,
                 microphone: scene.microphone,
                 now_playing: scene.playing.map(|playing| NowPlayingView {
-                    label: &label,
+                    label: if scene.long_title { &long_label } else { &label },
                     playing,
                     progress: Some(0.35),
+                    scroll: scene.scroll,
                 }),
                 outputs: &output_labels,
                 active_output: Some(0),

@@ -28,6 +28,10 @@ Musica in riproduzione e microfono in uso:
 
 ![Musica e microfono](docs/img/2-musica-e-microfono.png)
 
+Un titolo troppo lungo scorre lentamente (marquee), con una pausa all'inizio:
+
+![Titolo lungo](docs/img/2b-titolo-lungo-che-scorre.png)
+
 Muto, Non disturbare attivo, microfono muto, brano in pausa, tasto premuto:
 
 ![Stati attivi](docs/img/3-muto-non-disturbare-pausa.png)

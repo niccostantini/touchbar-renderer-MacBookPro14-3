@@ -49,6 +49,11 @@ const KEYBOARD_INTERVAL: Duration = Duration::from_millis(30);
 const LEVEL_POLL_INTERVAL: Duration = Duration::from_millis(25);
 /// A volume reading may predate our own change by one poll; ignore it.
 const VOLUME_ECHO_GRACE: Duration = Duration::from_millis(1_000);
+/// Marquee for long titles: pause at the start of each pass, then scroll.
+const MARQUEE_HOLD: Duration = Duration::from_secs(2);
+const MARQUEE_SPEED: f64 = 32.0; // native pixels per second
+/// Rendering width for titles: wide enough that nothing is cut with "…".
+const MARQUEE_MAX_WIDTH: u32 = 6_000;
 
 /// Runs the renderer and reconnects forever with capped backoff.
 pub fn run_forever() {
@@ -221,6 +226,11 @@ struct Session {
     output_labels: Vec<TextMask>,
     output_names: Vec<String>,
     picker_was_open: bool,
+    /// When the current title appeared, and its last drawn marquee offset.
+    marquee_since: Duration,
+    marquee_offset: u32,
+    /// Only the now-playing area changed since the last frame.
+    marquee_dirty: bool,
 }
 
 impl Session {
@@ -285,6 +295,9 @@ impl Session {
             output_labels: Vec::new(),
             output_names: Vec::new(),
             picker_was_open: false,
+            marquee_since: Duration::ZERO,
+            marquee_offset: 0,
+            marquee_dirty: false,
         })
     }
 
@@ -529,6 +542,10 @@ impl Session {
             || self.stepper.busy()
             || self.input.scrub().is_some()
             || self.input.outputs_open()
+            || self
+                .label
+                .as_ref()
+                .is_some_and(|(_, label)| self.bar.now_playing_scrolls(label.width))
             || self.overlay.value != self.overlay.target
             || self.enrollment.value != self.enrollment.target
     }
@@ -560,10 +577,16 @@ impl Session {
     }
 
     fn submit_if_ready(&mut self, connection: &HardwareConnection) -> Result<(), RendererError> {
-        if !self.registered || !self.dirty || self.in_flight.is_some() {
+        if !self.registered || self.in_flight.is_some() || !(self.dirty || self.marquee_dirty) {
             return Ok(());
         }
-        self.render()?;
+        // A marquee step alone repaints just the title area of the frame
+        // already in the buffer; anything else redraws the whole bar.
+        let partial = !self.dirty
+            && !self.screen_off
+            && self.overlay.value == 0
+            && self.input.surface() == Surface::Normal;
+        self.render(partial)?;
         let frame_id = self.take_frame_id();
         self.send(
             ClientMessage::SubmitFrame(SubmitFrame {
@@ -579,10 +602,11 @@ impl Session {
             acknowledged: false,
         });
         self.dirty = false;
+        self.marquee_dirty = false;
         Ok(())
     }
 
-    fn render(&mut self) -> Result<(), RendererError> {
+    fn render(&mut self, partial: bool) -> Result<(), RendererError> {
         if self.screen_off {
             self.frame.as_mut_slice().fill(0);
             return Ok(());
@@ -604,6 +628,7 @@ impl Session {
                     .input
                     .scrub()
                     .or_else(|| player.progress(Instant::now())),
+                scroll: self.marquee_offset,
             }),
             _ => None,
         };
@@ -623,6 +648,12 @@ impl Session {
                 .position(|output| output.active),
             fraction: self.input.slider().fraction(),
         };
+        if partial {
+            return self
+                .bar
+                .repaint_now_playing(&mut frame, &view)
+                .map_err(|_| RendererError::Frame);
+        }
         self.bar
             .render(&mut frame, &view)
             .map_err(|_| RendererError::Frame)?;
@@ -696,6 +727,7 @@ impl Session {
         self.dirty |= self.enrollment.advance(now, ENROLLMENT_PROGRESS_DURATION);
         self.dirty |= self.input.slider_mut().expire(now);
         self.advance_context();
+        self.advance_marquee(now);
         self.dirty |= self.input.expire_outputs(now);
         let picker_open = self.input.outputs_open();
         if picker_open && !self.picker_was_open {
@@ -809,10 +841,38 @@ impl Session {
         let mask = text.render(
             &wanted,
             self.bar.now_playing_font_size(),
-            self.bar.now_playing_label_width(),
+            MARQUEE_MAX_WIDTH,
             self.bar.now_playing_label_height(),
         );
         self.label = Some((wanted, mask));
+        self.marquee_since = self.now;
+        self.marquee_offset = 0;
+    }
+
+    /// Advances the title marquee; marks only its area for repaint.
+    fn advance_marquee(&mut self, now: Duration) {
+        let Some((_, label)) = self.label.as_ref() else {
+            return;
+        };
+        if !self.bar.now_playing_scrolls(label.width) {
+            return;
+        }
+        let period = self.bar.marquee_period(label.width);
+        let speed = MARQUEE_SPEED * self.bar.horizontal_scale();
+        let scroll_time = f64::from(period) / speed;
+        let cycle = MARQUEE_HOLD.as_secs_f64() + scroll_time;
+        let elapsed = now.saturating_sub(self.marquee_since).as_secs_f64() % cycle;
+        let scrolled = elapsed - MARQUEE_HOLD.as_secs_f64();
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let offset = if scrolled <= 0.0 {
+            0
+        } else {
+            ((scrolled * speed) as u32) % period
+        };
+        if offset != self.marquee_offset {
+            self.marquee_offset = offset;
+            self.marquee_dirty = true;
+        }
     }
 
     /// Steps the display toward the slider target and mirrors the measured

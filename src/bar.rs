@@ -82,12 +82,15 @@ const MICROPHONE_BUTTON: Span = Span { x: 548, width: 110 };
 const CUSTOM_ICON: u32 = 30;
 
 // Now playing: title line and a thin progress bar, shown while a player has
-// a track.
-const NOW_PLAYING: Span = Span { x: 680, width: 336 };
+// a track, centred in the free space between the custom buttons (the
+// microphone one only while recording) and the brightness group.
+const NOW_PLAYING_MARGIN: u32 = 22;
 const NOW_PLAYING_TEXT_HEIGHT: u32 = 42;
 const NOW_PLAYING_FONT: u32 = 23;
 const PROGRESS_Y: u32 = 46;
 const PROGRESS_HEIGHT: u32 = 4;
+/// Blank space between the end of a scrolling title and its next start.
+const MARQUEE_GAP: u32 = 90;
 
 // Normal strip, right-aligned like the macOS Control Strip: brightness group,
 // media group, audio group.
@@ -192,6 +195,8 @@ pub struct NowPlayingView<'a> {
     pub playing: bool,
     /// Track progress 0.0..=1.0, when the player reports it.
     pub progress: Option<f64>,
+    /// Marquee offset in display pixels, for labels wider than the area.
+    pub scroll: u32,
 }
 
 /// Everything besides geometry that affects one frame.
@@ -285,10 +290,32 @@ impl Bar {
         self
     }
 
+    /// Display pixels per native pixel, horizontally.
+    #[must_use]
+    pub fn horizontal_scale(self) -> f64 {
+        f64::from(self.width) / f64::from(NATIVE_WIDTH)
+    }
+
+    /// The free space left of the brightness group, after the last visible
+    /// custom button.
+    fn now_playing_span(self) -> Span {
+        let last = if self.contextual.microphone {
+            MICROPHONE_BUTTON
+        } else {
+            DO_NOT_DISTURB_BUTTON
+        };
+        let left = last.x + last.width + NOW_PLAYING_MARGIN;
+        let right = DISPLAY_BUTTON.x - NOW_PLAYING_MARGIN;
+        Span {
+            x: left,
+            width: right.saturating_sub(left).max(1),
+        }
+    }
+
     /// Width available to the now-playing label, in display pixels.
     #[must_use]
     pub fn now_playing_label_width(self) -> u32 {
-        self.scaled_x(NOW_PLAYING.width).max(1)
+        self.scaled_x(self.now_playing_span().width).max(1)
     }
 
     #[must_use]
@@ -304,10 +331,46 @@ impl Bar {
         size
     }
 
+    /// Whether a rendered label must scroll to be read in full.
+    #[must_use]
+    pub fn now_playing_scrolls(self, label_width: u32) -> bool {
+        label_width > self.now_playing_label_width()
+    }
+
+    /// One marquee cycle: the label plus the gap, in display pixels.
+    #[must_use]
+    pub fn marquee_period(self, label_width: u32) -> u32 {
+        label_width + self.scaled_x(MARQUEE_GAP).max(1)
+    }
+
+    /// Redraws only the now-playing area (marquee and progress steps), on a
+    /// frame that already holds the rest of the normal surface.
+    ///
+    /// # Errors
+    ///
+    /// Rejects a changed frame geometry or an internally invalid draw.
+    pub fn repaint_now_playing(
+        self,
+        frame: &mut Xrgb8888Frame<'_>,
+        view: &View<'_>,
+    ) -> Result<(), BarError> {
+        if frame.width() != self.width || frame.height() != self.height {
+            return Err(BarError::FrameGeometryMismatch);
+        }
+        if view.surface != Surface::Normal || !self.contextual.now_playing {
+            return Ok(());
+        }
+        let Some(now_playing) = view.now_playing else {
+            return Ok(());
+        };
+        frame.fill_rectangle(self.span_bounds(self.now_playing_span()), BACKGROUND)?;
+        self.render_now_playing(frame, &now_playing, view.pressed == Some(Target::NowPlaying))
+    }
+
     /// Maps a display x coordinate to a position in the shown track.
     #[must_use]
     pub fn now_playing_fraction(self, x: f64) -> f64 {
-        let left = f64::from(self.scaled_x(NOW_PLAYING.x));
+        let left = f64::from(self.scaled_x(self.now_playing_span().x));
         let width = f64::from(self.now_playing_label_width());
         ((x - left) / width).clamp(0.0, 1.0)
     }
@@ -363,7 +426,7 @@ impl Bar {
                 if self.within(self.function_slot(0), x) {
                     return Some(Target::Action(Action::Escape));
                 }
-                if self.contextual.now_playing && self.within_span(NOW_PLAYING, x) {
+                if self.contextual.now_playing && self.within_span(self.now_playing_span(), x) {
                     return Some(Target::NowPlaying);
                 }
                 self.normal_items()
@@ -526,7 +589,7 @@ impl Bar {
         now_playing: &NowPlayingView<'_>,
         pressed: bool,
     ) -> Result<(), BarError> {
-        let area = self.span_bounds(NOW_PLAYING);
+        let area = self.span_bounds(self.now_playing_span());
         if pressed {
             self.draw_plate(frame, area, PLATE)?;
         }
@@ -536,12 +599,16 @@ impl Bar {
         } else {
             self.height
         };
-        if label.width > 0
-            && label.width <= area.width
+        let color = if now_playing.playing {
+            LABEL
+        } else {
+            PAUSED_LABEL
+        };
+        let valid = label.width > 0
             && label.height <= self.height
-            && label.pixels.len() == (label.width * label.height) as usize
-        {
-            let top = text_height.saturating_sub(label.height) / 2;
+            && label.pixels.len() == (label.width * label.height) as usize;
+        let top = text_height.saturating_sub(label.height) / 2;
+        if valid && label.width <= area.width {
             frame.blend_mask(
                 Rectangle {
                     x: area.x + (area.width - label.width) / 2,
@@ -550,11 +617,19 @@ impl Bar {
                     height: label.height,
                 },
                 &label.pixels,
-                if now_playing.playing {
-                    LABEL
-                } else {
-                    PAUSED_LABEL
+                color,
+            )?;
+        } else if valid {
+            let window = marquee_window(label, area.width, now_playing.scroll, self.marquee_period(label.width));
+            frame.blend_mask(
+                Rectangle {
+                    x: area.x,
+                    y: top,
+                    width: area.width,
+                    height: label.height,
                 },
+                &window,
+                color,
             )?;
         }
         if let Some(progress) = now_playing.progress {
@@ -796,6 +871,23 @@ const fn normal_symbol(target: Target) -> Symbol {
     }
 }
 
+/// The `width`-pixel slice of a label scrolled by `scroll`, with the label
+/// repeating every `period` pixels (label, gap, label...).
+fn marquee_window(label: &TextMask, width: u32, scroll: u32, period: u32) -> Vec<u8> {
+    let period = period.max(label.width).max(1);
+    let mut window = vec![0_u8; (width * label.height) as usize];
+    for x in 0..width {
+        let source = (x + scroll) % period;
+        if source >= label.width {
+            continue;
+        }
+        for y in 0..label.height {
+            window[(y * width + x) as usize] = label.pixels[(y * label.width + source) as usize];
+        }
+    }
+    window
+}
+
 /// Icon colour by group: system keys warm-to-cool, brightness yellow and
 /// orange, media magenta, audio cyan and violet.
 const fn icon_color(target: Target) -> Rgb {
@@ -1015,7 +1107,7 @@ mod tests {
         assert_eq!(pick(2_000), None);
         assert_eq!(at(600), Some(Target::Action(Action::ToggleMicrophone)));
         assert_eq!(at(800), Some(Target::NowPlaying));
-        assert!((bar.now_playing_fraction(680.0 + 168.0) - 0.5).abs() < 1e-9);
+        assert!((bar.now_playing_fraction(680.0 + 171.0) - 0.5).abs() < 1e-9);
     }
 
     #[test]
@@ -1036,6 +1128,19 @@ mod tests {
         assert!(bar.track_fraction(0.0).abs() < f64::EPSILON);
         assert!((bar.track_fraction(2_169.0) - 1.0).abs() < f64::EPSILON);
         assert!((bar.track_fraction(470.0 + 745.0) - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn marquee_window_wraps_with_a_gap() {
+        let label = TextMask {
+            width: 3,
+            height: 1,
+            pixels: vec![1, 2, 3],
+        };
+        // Period 5: label (3 px) then a 2 px gap.
+        assert_eq!(marquee_window(&label, 4, 0, 5), vec![1, 2, 3, 0]);
+        assert_eq!(marquee_window(&label, 4, 2, 5), vec![3, 0, 0, 1]);
+        assert_eq!(marquee_window(&label, 4, 5, 5), vec![1, 2, 3, 0]);
     }
 
     #[test]
@@ -1082,6 +1187,7 @@ mod tests {
                             label: &label,
                             playing: false,
                             progress: Some(fraction),
+                            scroll: 0,
                         }),
                         outputs: &outputs,
                         active_output: Some(1),
