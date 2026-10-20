@@ -12,6 +12,7 @@ WP="$USER_HOME/.config/wireplumber/wireplumber.conf.d/51-hide-ibridge-h264.conf"
 
 if [ "${1:-}" = "--restore" ]; then
 	rm -f /etc/v4l2-relayd.d/facetime.conf /etc/modprobe.d/zz-facetime-loopback.conf "$WP"
+	rm -rf /etc/systemd/system/v4l2-relayd@facetime.service.d
 	systemctl daemon-reload
 	systemctl stop v4l2-relayd@facetime.service 2>/dev/null || true
 	modprobe -r v4l2loopback 2>/dev/null || true
@@ -22,6 +23,7 @@ fi
 command -v v4l2-relayd >/dev/null || { echo "Prima: sudo apt install v4l2-relayd"; exit 1; }
 install -Dm644 "$HERE/facetime.conf" /etc/v4l2-relayd.d/facetime.conf
 install -Dm644 "$HERE/zz-facetime-loopback.conf" /etc/modprobe.d/zz-facetime-loopback.conf
+install -Dm644 "$HERE/override.conf" /etc/systemd/system/v4l2-relayd@facetime.service.d/override.conf
 install -Dm644 -o "$SUDO_USER" -g "$SUDO_USER" "$HERE/51-hide-ibridge-h264.conf" "$WP"
 chown -R "$SUDO_USER:$SUDO_USER" "$USER_HOME/.config/wireplumber"
 
