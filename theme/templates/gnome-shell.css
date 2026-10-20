@@ -95,12 +95,36 @@ stage {
   background-color: %(hover)s;
 }
 .quick-toggle:checked,
-.quick-menu-toggle .quick-toggle:checked,
-.quick-menu-toggle .quick-toggle-arrow:checked {
+.quick-menu-toggle .quick-toggle:checked {
   background-gradient-direction: horizontal;
   background-gradient-start: %(g1)s;
   background-gradient-end: %(g2)s;
   color: #ffffff;
+}
+/* Toggles with an arrow: one pill split by a thin divider, the arrow
+   carrying the gradient's end colour when on. */
+.quick-menu-toggle .quick-toggle {
+  border-radius: 999px 0 0 999px;
+  border-right-width: 0;
+  box-shadow: none;
+}
+.quick-menu-toggle .quick-toggle-arrow {
+  background-color: %(chip)s;
+  color: %(ink)s;
+  border: 2px solid %(line)s;
+  border-left: 2px solid %(line)s;
+  border-radius: 0 999px 999px 0;
+  box-shadow: none;
+}
+.quick-menu-toggle .quick-toggle-arrow:hover {
+  background-color: %(hover)s;
+}
+.quick-menu-toggle .quick-toggle-arrow:checked {
+  background-color: %(g2)s;
+  color: #ffffff;
+}
+.quick-menu-toggle .quick-toggle-arrow:checked:hover {
+  background-color: #ff9150;
 }
 .quick-settings-system-item .icon-button,
 .icon-button {
