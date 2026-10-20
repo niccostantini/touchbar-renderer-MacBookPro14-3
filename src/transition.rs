@@ -4,9 +4,9 @@
 use std::time::Duration;
 
 /// Default length of a layout change.
-pub const LAYOUT_FADE: Duration = Duration::from_millis(160);
+pub const LAYOUT_FADE: Duration = Duration::from_millis(240);
 /// The Fn row appears while a key is held: keep it snappier.
-pub const FN_FADE: Duration = Duration::from_millis(90);
+pub const FN_FADE: Duration = Duration::from_millis(130);
 
 pub struct Crossfade {
     from: Vec<u8>,
