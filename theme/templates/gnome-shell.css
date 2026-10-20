@@ -41,6 +41,15 @@ stage {
   color: %(bg)s;
   border-color: %(line)s;
 }
+/* App tray icons draw their own colours (white or dark): a magenta chip
+   keeps both readable on the cream bar. */
+#panel .appindicator-box {
+  background-gradient-direction: horizontal;
+  background-gradient-start: %(g1)s;
+  background-gradient-end: %(g2)s;
+  border-radius: 999px;
+  padding: 0 6px;
+}
 #panel .clock {
   font-family: "Noto Serif Display", serif;
   font-style: italic;
