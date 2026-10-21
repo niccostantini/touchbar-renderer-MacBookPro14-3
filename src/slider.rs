@@ -201,9 +201,9 @@ impl Throttle {
 /// Initial guess for how much one brightness key moves the backlight.
 const DEFAULT_STEP: f64 = 1.0 / 16.0;
 /// A step is complete once the level stopped changing for this long...
-const SETTLE_QUIET: Duration = Duration::from_millis(60);
+const SETTLE_QUIET: Duration = Duration::from_millis(120);
 /// ...or when nothing happened at all within this time.
-const SETTLE_TIMEOUT: Duration = Duration::from_millis(350);
+const SETTLE_TIMEOUT: Duration = Duration::from_millis(800);
 const CHANGE_EPSILON: f64 = 0.002;
 const TARGET_TIMEOUT: Duration = Duration::from_secs(6);
 const EXTREME_PRESSES: u8 = 3;
