@@ -227,8 +227,8 @@ pub struct DisplayStepper {
     step: f64,
     awaiting: Option<Awaiting>,
     stalled: u8,
-    /// When the target was set: a target never reached is dropped after
-    /// TARGET_TIMEOUT, so the slider falls back to showing the real level.
+    /// When the target was set or last made progress: a target with no
+    /// progress for TARGET_TIMEOUT is dropped and the slider shows the real level.
     target_since: Duration,
     extra_presses: u8,
 }
@@ -290,6 +290,9 @@ impl DisplayStepper {
                     let moved = (actual - awaiting.before).abs();
                     self.step = (self.step + moved.clamp(0.01, 0.25)) / 2.0;
                     self.stalled = 0;
+                    // Progress: the timeout counts time without progress, so a
+                    // long change (many animated steps) can take as long as it needs.
+                    self.target_since = now;
                     self.awaiting = None;
                 }
                 None if now.saturating_sub(awaiting.sent_at) >= SETTLE_TIMEOUT => {
@@ -446,6 +449,30 @@ mod tests {
             assert!((level - 0.3).abs() <= step / 2.0 + 1e-9, "step {step}: {level}");
             assert!(presses <= (0.7 / step).ceil() as usize + 1, "step {step}: {presses}");
         }
+    }
+
+    #[test]
+    fn a_long_change_is_not_cut_by_the_timeout() {
+        // 0 -> 1 with small steps that each take 600 ms to settle: well over
+        // TARGET_TIMEOUT in total, but always making progress.
+        let mut stepper = DisplayStepper::default();
+        stepper.set_target(1.0, Duration::ZERO);
+        let mut level: f64 = 0.0;
+        let mut pending: Option<Duration> = None;
+        for tick in 0..10_000 {
+            let now = ms(tick * 10);
+            if pending.is_some_and(|at| at <= now) {
+                level = (level + 0.04).min(1.0);
+                pending = None;
+            }
+            if stepper.poll(now, level).is_some() {
+                pending = Some(now + ms(600));
+            }
+            if !stepper.busy() && pending.is_none() {
+                break;
+            }
+        }
+        assert!(level > 0.97, "{level}");
     }
 
     #[test]
