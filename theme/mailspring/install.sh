@@ -32,9 +32,9 @@ core = config.setdefault("*", {}).setdefault("core", {})
 core["theme"] = "ui-automatic"
 appearance = core.setdefault("appearance", {})
 appearance.update(lightThemeName="ui-leocamp", darkThemeName="ui-leocamp-dark", useSystemAccent=False)
-tmp = path + ".tmp"
-json.dump(config, open(tmp, "w"), indent=2)
-os.replace(tmp, path)
+# In place: Mailspring watches this file.
+with open(path, "w") as out:
+    json.dump(config, out, indent=2)
 PY
 echo "Temi Leo Camp installati in Mailspring (tema: Automatico)."
 echo "Per annullare: sh $HERE/install.sh --undo"

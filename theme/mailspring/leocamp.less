@@ -1,93 +1,409 @@
-// Leo Camp rules shared by the light and dark Mailspring themes: thick ink
-// outlines with a hard magenta shadow, the magenta to orange gradient on the
-// main buttons and Fraunces italic for the subject, as in the GTK theme.
+// Leo Camp rules shared by the light and dark Mailspring themes, after the
+// GNOME Shell and GTK themes (theme/build.py): cream/plum surfaces, thick ink
+// outlines with a hard magenta shadow, the magenta to orange gradient on
+// what is active, Fraunces italic for headings, camp traffic lights.
 @import 'ui-variables';
 
+@leo-gradient: linear-gradient(90deg, @leo-g1, @leo-g2);
+@leo-card-shadow: 5px 5px 0 0 @leo-g1;
+
+body,
+.sheet-container,
+.sheet,
+.column-ThreadList,
+.column-MessageList {
+  background: @leo-bg;
+}
+
+// ---- Toolbar -----------------------------------------------------------
+
+.sheet-toolbar,
 .sheet-toolbar-container,
-.sheet-toolbar {
-  background: @toolbar-background-color;
-  box-shadow: none;
-}
-
-.account-sidebar,
-.column-RootSidebar {
-  background: @panel-background-color;
-}
-
-.outline-view .item-container .item.selected,
-.outline-view .item-container.selected .item {
-  background: @leo-chip-strong;
-  border-radius: 8px;
-  .name { color: @text-color; font-weight: 700; }
-}
-
-.outline-view .item-count-box {
-  background-image: linear-gradient(90deg, @leo-g1, @leo-g2);
-  color: #fff;
+body.is-blurred .sheet-toolbar-container,
+.toolbar-RootSidebar,
+.toolbar-ThreadList,
+.toolbar-MessageList,
+.toolbar-MessageListSidebar {
+  background: @leo-bg !important;
+  background-image: none !important;
   box-shadow: none;
   border: none;
-  font-weight: 700;
 }
 
-.btn.btn-emphasis,
-.btn.btn-send,
-.btn.btn-emphasis:hover,
-.btn.btn-send:hover {
-  background-image: linear-gradient(90deg, @leo-g1, @leo-g2);
+// Camp traffic lights, as windowcontrols in the GTK theme.
+.toolbar-window-controls button {
+  width: 16px;
+  height: 16px;
+  margin: 3px 5px 3px 3px;
+  border-radius: 50%;
+  border: 2px solid @leo-ink !important;
+  box-shadow: 2px 2px 0 0 @leo-ink !important;
+  background-size: 100% 100% !important;
+  opacity: 1 !important;
+  &:active {
+    box-shadow: none !important;
+    transform: translate(2px, 2px);
+  }
+}
+.toolbar-window-controls button.close {
+  background-image: linear-gradient(135deg, @leo-g1, #ff4f6d) !important;
+}
+.toolbar-window-controls button.minimize {
+  background-image: linear-gradient(135deg, #ffb02e, @leo-g2) !important;
+}
+.toolbar-window-controls button.maximize {
+  background-image: linear-gradient(135deg, #9c6bff, #6a2be8) !important;
+}
+body.is-blurred .toolbar-window-controls button {
+  background-image: linear-gradient(@leo-chip, @leo-chip) !important;
+  box-shadow: none !important;
+}
+
+.sheet-toolbar .btn-toolbar,
+body.is-blurred .sheet-toolbar-container .btn.btn-toolbar {
+  background: @leo-chip !important;
+  border: 2px solid @leo-ink;
+  border-radius: 10px;
+  box-shadow: 2px 2px 0 0 @leo-ink !important;
+  opacity: 1;
+  img.content-mask {
+    background-color: @leo-ink;
+    opacity: 1;
+  }
+  &:hover {
+    background: @leo-hover !important;
+  }
+  &:active {
+    box-shadow: none;
+    transform: translate(2px, 2px);
+  }
+}
+// Compose: the call to action.
+.sheet-toolbar .btn-toolbar.item-compose,
+.sheet-toolbar .item-compose .btn-toolbar,
+body.is-blurred .sheet-toolbar-container .btn-toolbar.item-compose,
+body.is-blurred .sheet-toolbar-container .item-compose .btn-toolbar {
+  background: @leo-gradient !important;
+  opacity: 1;
+  img.content-mask {
+    background-color: #fff !important;
+  }
+}
+
+.thread-search-bar {
+  background: @leo-surface;
+  border: 2px solid @leo-ink;
+  border-radius: 999px;
+  box-shadow: 3px 3px 0 0 @leo-g1;
+  color: @leo-ink;
+  input {
+    color: @leo-ink;
+  }
+}
+
+// ---- Sidebar: a floating card -------------------------------------------
+
+.column-RootSidebar,
+.toolbar-RootSidebar {
+  background: @leo-bg;
+}
+.account-sidebar {
+  margin: 4px 10px 14px 10px;
+  height: auto;
+  background: @leo-surface;
+  border: 2px solid @leo-ink;
+  border-radius: 16px;
+  box-shadow: @leo-card-shadow;
+  .scroll-region-content {
+    padding: 8px 6px;
+  }
+}
+
+.account-sidebar .heading {
+  font-family: @font-family-heading;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: @leo-ink;
+  padding-top: 8px;
+}
+
+.outline-view .item-container .item {
+  border-radius: 10px;
+  margin: 1px 0;
+  color: @leo-ink;
+  img.content-mask {
+    background-color: @leo-ink;
+  }
+}
+.outline-view .item-container:hover .item {
+  background: @leo-chip;
+}
+.outline-view .item-container .item.selected,
+.outline-view .item-container.selected .item {
+  background-image: @leo-gradient;
+  border: 2px solid @leo-ink;
+  box-shadow: 2px 2px 0 0 @leo-ink;
   color: #fff;
-  border: 2px solid @leo-line;
-  box-shadow: 3px 3px 0 0 @leo-line;
-  font-weight: 800;
-  img.content-mask { background-color: #fff; }
+  .name {
+    color: #fff;
+    font-weight: 700;
+  }
+  img.content-mask {
+    background-color: #fff;
+  }
 }
-.btn.btn-emphasis:hover,
-.btn.btn-send:hover {
-  background-image: linear-gradient(90deg, @leo-g2, @leo-g1);
-}
-.btn.btn-emphasis:active,
-.btn.btn-send:active {
+
+.outline-view .item .item-count-box,
+.outline-view .item .item-count-box.alt-count {
+  background: @leo-chip;
+  color: @leo-ink;
+  border: 1.5px solid @leo-ink;
   box-shadow: none;
-  transform: translate(2px, 2px);
+  border-radius: 999px;
+  font-weight: 800;
 }
+.outline-view .item.selected .item-count-box {
+  background: @leo-surface;
+  color: @leo-ink;
+}
+
+.disclosure-triangle div {
+  border-left-color: @leo-muted;
+}
+
+// ---- Thread list: a second card -----------------------------------------
+
+.list-container.thread-list {
+  width: auto;
+  height: auto;
+  margin: 4px 16px 16px 6px;
+  background: @leo-surface;
+  border: 2px solid @leo-ink;
+  border-radius: 16px;
+  box-shadow: @leo-card-shadow;
+  overflow: hidden;
+}
+
+.thread-list .list-item,
+.list-tabular .list-tabular-item {
+  background: @leo-surface;
+  border-bottom: 1px solid @leo-chip;
+}
+.thread-list .list-item:hover,
+.list-tabular .list-tabular-item:hover {
+  background: @leo-chip;
+}
+.thread-list .list-item.selected,
+.list-tabular .list-tabular-item.selected {
+  background: @leo-hover;
+}
+.thread-list .list-item.focused,
+.thread-list .list-item.focused.selected,
+.list-tabular .list-tabular-item.focused {
+  background: @leo-accent;
+  color: #fff;
+  box-shadow: inset 4px 0 0 0 @leo-g1;
+}
+.thread-list .list-item.keyboard-cursor,
+.list-tabular .list-tabular-item.keyboard-cursor {
+  box-shadow: inset 4px 0 0 0 @leo-g1;
+}
+
+// Unread: a magenta to orange dot instead of the blue one.
+.thread-list .thread-icon.thread-icon-unread {
+  background-image: radial-gradient(circle at 40% 40%, @leo-g2 0, @leo-g1 4.5px, transparent 5.5px) !important;
+  background-size: 100% 100%;
+  filter: none !important;
+}
+
+// Quick actions: light chips (the icons are dark images) with the card shadow.
+@archive-img: '../static/images/thread-list-quick-actions/ic-quick-button-archive@2x.png';
+@trash-img: '../static/images/thread-list-quick-actions/ic-quick-button-trash@2x.png';
+@snooze-img: '../static/images/thread-list-quick-actions/ic-quickaction-snooze@2x.png';
+.thread-list .list-item .list-column-HoverActions,
+.thread-list .list-item.focused:hover .list-column-HoverActions,
+.thread-list .list-item.selected:hover .list-column-HoverActions {
+  .action {
+    border: 3px solid #17111c;
+    border-radius: 16px;
+    box-shadow: 5px 5px 0 0 @leo-g1;
+    filter: none;
+  }
+  .action.action-archive {
+    background: url(@archive-img) center no-repeat, @leo-action-bg;
+  }
+  .action.action-trash {
+    background: url(@trash-img) center no-repeat, @leo-action-bg;
+  }
+  .action.action-snooze {
+    background: url(@snooze-img) center no-repeat, @leo-action-bg;
+  }
+}
+.thread-list .list-item:hover .list-column-HoverActions .inner {
+  background-image: linear-gradient(to right, fade(@leo-chip, 0%) 0%, @leo-chip 40%, @leo-chip 100%);
+}
+
+.thread-list .list-item .list-column-Checkmark .checkmark .inner,
+.list-tabular .checkmark .inner {
+  border: 2px solid @leo-muted;
+  border-radius: 5px;
+  background: transparent;
+}
+.thread-list .list-item.selected .checkmark .inner {
+  background-image: @leo-gradient;
+  border-color: @leo-ink;
+}
+
+// ---- Messages -----------------------------------------------------------
 
 .message-subject,
 .message-subject-wrap .message-subject {
   font-family: @font-family-heading;
   font-style: italic;
   font-weight: 700;
+  font-size: 24px;
 }
 
+#message-list {
+  background: @leo-bg;
+}
 #message-list .message-item-wrap .message-item-white-wrap {
-  border: 2px solid @leo-line;
-  border-radius: 12px;
-  box-shadow: 5px 5px 0 0 @leo-g1;
+  border: 2px solid @leo-ink;
+  border-radius: 14px;
+  box-shadow: @leo-card-shadow;
   overflow: hidden;
 }
 #message-list .message-item-wrap.collapsed .message-item-white-wrap {
   box-shadow: 3px 3px 0 0 @leo-g1;
 }
 
-.fixed-popover,
-.menu,
-.dropdown-menu {
-  border: 2px solid @leo-line;
-  border-radius: 12px;
-  box-shadow: 5px 5px 0 0 @leo-g1;
+// ---- Buttons, menus, inputs --------------------------------------------
+
+.btn {
+  border-radius: 10px;
+}
+.btn.btn-emphasis,
+.btn.btn-emphasis:hover {
+  background-image: @leo-gradient;
+  color: #fff;
+  border: 2px solid @leo-ink;
+  box-shadow: 3px 3px 0 0 @leo-ink;
+  font-weight: 800;
+  img.content-mask {
+    background-color: #fff;
+  }
+}
+.btn.btn-emphasis:hover {
+  background-image: linear-gradient(90deg, @leo-g2, @leo-g1);
+}
+.btn.btn-emphasis:active {
+  box-shadow: none;
+  transform: translate(2px, 2px);
 }
 
-.thread-list .list-item.focused,
-.thread-list .list-item.focused.selected {
-  background: @list-focused-bg;
-  color: #fff;
+.fixed-popover,
+.dropdown-menu {
+  border: 2px solid @leo-ink;
+  border-radius: 14px;
+  box-shadow: @leo-card-shadow;
 }
 
 input[type='text'],
 input[type='search'],
-input[type='email'],
-.search-bar .header-container {
+input[type='email'] {
   border-radius: 8px;
+}
+
+.scrollbar-track .scrollbar-handle {
+  background: fade(@leo-g1, 45%);
+  border: none !important;
+  border-radius: 999px;
 }
 
 ::selection {
   background: fade(@leo-g1, 35%);
+}
+
+// ---- Composer -----------------------------------------------------------
+
+// Send (and the other split buttons with emphasis): one gradient pill with
+// an ink outline and hard shadow; the menu arrow is split by a thin line.
+.button-dropdown.btn-emphasis {
+  border: 2px solid @leo-ink;
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 0 @leo-ink;
+  background-image: @leo-gradient;
+  overflow: hidden;
+  .primary-item,
+  .secondary-picker,
+  .only-item {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #fff !important;
+    font-weight: 800;
+    border-radius: 0;
+    img.content-mask {
+      background-color: #fff !important;
+    }
+  }
+  .secondary-picker {
+    border-left: 2px solid fade(#fff, 45%) !important;
+  }
+  &:hover {
+    background-image: linear-gradient(90deg, @leo-g2, @leo-g1);
+  }
+  &:active {
+    box-shadow: none;
+    transform: translate(2px, 2px);
+  }
+  .secondary-items {
+    color: @leo-ink;
+  }
+}
+
+.composer-inner-wrap {
+  background: @leo-surface;
+}
+.composer-inner-wrap .composer-action-bar-wrap {
+  background: @leo-bg;
+  border-top: 2px solid @leo-ink;
+}
+.composer-inner-wrap .composer-action-bar-wrap .btn.btn-toolbar img.content-mask,
+.composer-action-bar-plugins img.content-mask {
+  background-color: @leo-ink;
+}
+
+// The subject is the message's title.
+.composer-subject input,
+.compose-subject-wrap input,
+.subject-field input {
+  font-family: @font-family-heading;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 20px;
+}
+
+// Participant chips in To/Cc: gradient outline pills.
+.tokenizing-field .token {
+  background: @leo-chip;
+  color: @leo-ink;
+  border: 1.5px solid @leo-ink;
+  border-radius: 999px;
+  &.selected,
+  &.dragging {
+    background-image: @leo-gradient;
+    color: #fff;
+  }
+}
+
+.from-field .button-dropdown .primary-item,
+.from-field .button-dropdown .only-item {
+  background: @leo-chip;
+  border: 1.5px solid @leo-ink;
+  border-radius: 999px;
+  box-shadow: none;
 }
