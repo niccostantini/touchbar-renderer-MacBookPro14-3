@@ -206,6 +206,7 @@ const SETTLE_QUIET: Duration = Duration::from_millis(60);
 const SETTLE_TIMEOUT: Duration = Duration::from_millis(350);
 const CHANGE_EPSILON: f64 = 0.002;
 const TARGET_TIMEOUT: Duration = Duration::from_secs(6);
+const EXTREME_PRESSES: u8 = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Awaiting {
@@ -229,6 +230,7 @@ pub struct DisplayStepper {
     /// When the target was set: a target never reached is dropped after
     /// TARGET_TIMEOUT, so the slider falls back to showing the real level.
     target_since: Duration,
+    extra_presses: u8,
 }
 
 impl Default for DisplayStepper {
@@ -239,12 +241,21 @@ impl Default for DisplayStepper {
             awaiting: None,
             stalled: 0,
             target_since: Duration::ZERO,
+            extra_presses: 0,
         }
     }
 }
 
 impl DisplayStepper {
+    /// `extreme` asks for a couple of extra key presses once the hardware
+    /// stops moving: GNOME's own 0%/100% can lie past the hardware's limits.
+    #[cfg(test)]
     pub fn set_target(&mut self, fraction: f64, now: Duration) {
+        self.set_target_with_extremes(fraction, now, false);
+    }
+
+    pub fn set_target_with_extremes(&mut self, fraction: f64, now: Duration, extreme: bool) {
+        self.extra_presses = if extreme { EXTREME_PRESSES } else { 0 };
         self.target = Some(fraction.clamp(0.0, 1.0));
         self.target_since = now;
         self.stalled = 0;
@@ -306,6 +317,15 @@ impl DisplayStepper {
             StepDirection::Down => actual <= CHANGE_EPSILON,
         };
         if delta.abs() <= self.step / 2.0 || at_limit {
+            if self.extra_presses > 0 {
+                self.extra_presses -= 1;
+                // Keep pushing towards the requested end.
+                return Some(if target >= 0.5 {
+                    StepDirection::Up
+                } else {
+                    StepDirection::Down
+                });
+            }
             self.target = None;
             return None;
         }

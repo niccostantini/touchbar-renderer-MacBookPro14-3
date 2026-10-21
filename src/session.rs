@@ -464,7 +464,11 @@ impl Session {
             SliderKind::Keyboard => self.keyboard.set(to_percent(fraction)),
             SliderKind::Display => self
                 .stepper
-                .set_target(crate::levels::display_from_gnome(fraction), self.now),
+                .set_target_with_extremes(
+                    crate::levels::display_from_gnome(fraction),
+                    self.now,
+                    !(0.005..=0.995).contains(&fraction),
+                ),
         }
     }
 

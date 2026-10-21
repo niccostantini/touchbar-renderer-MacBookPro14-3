@@ -64,13 +64,19 @@ impl LevelSource {
 }
 
 /// GNOME 50's brightness slider against the gmux backlight of this Mac,
-/// measured at 0/25/50/75/100% (GNOME uses a perceptual scale).
+/// measured at 0/25/50/75/100% (GNOME uses a perceptual scale and its 0%
+/// keeps the backlight on).
 const GNOME_TO_HARDWARE: [(f64, f64); 5] =
-    [(0.0, 0.0), (0.25, 0.351), (0.5, 0.659), (0.75, 0.899), (1.0, 1.0)];
+    [(0.0, 0.172), (0.25, 0.351), (0.5, 0.659), (0.75, 0.899), (1.0, 1.0)];
 
 fn interpolate(value: f64, table: impl Iterator<Item = (f64, f64)> + Clone) -> f64 {
     let value = value.clamp(0.0, 1.0);
     let points: Vec<_> = table.collect();
+    if let Some(&(x0, y0)) = points.first()
+        && value <= x0
+    {
+        return y0;
+    }
     for pair in points.windows(2) {
         let ((x0, y0), (x1, y1)) = (pair[0], pair[1]);
         if value <= x1 {
@@ -128,6 +134,7 @@ mod tests {
     fn gnome_scale_round_trips() {
         assert!((display_from_gnome(0.5) - 0.659).abs() < 1e-9);
         assert!((display_to_gnome(0.659) - 0.5).abs() < 1e-9);
+        assert!(display_to_gnome(0.05).abs() < 1e-9, "below GNOME's 0% reads as 0");
         for value in [0.0, 0.1, 0.3, 0.62, 0.9, 1.0] {
             assert!((display_to_gnome(display_from_gnome(value)) - value).abs() < 1e-9);
         }
