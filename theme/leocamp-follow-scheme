@@ -29,4 +29,8 @@ apply() {
 }
 
 apply
-gsettings monitor org.gnome.desktop.interface color-scheme | while read -r _; do apply; done
+# Ubuntu's Appearance panel resets icon-theme to Yaru on every style switch:
+# apply after it, and once more in case it is late.
+gsettings monitor org.gnome.desktop.interface color-scheme | while read -r _; do
+	sleep 1; apply; sleep 2; apply
+done
