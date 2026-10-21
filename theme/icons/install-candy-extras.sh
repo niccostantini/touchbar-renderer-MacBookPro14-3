@@ -12,6 +12,7 @@ install -m644 "$HERE/leocamp-terminal.svg" "$CANDY/org.gnome.Ptyxis.svg"
 install -m644 "$HERE/leocamp-app-center.svg" "$CANDY/leocamp-app-center.svg"
 install -m644 "$HERE/leocamp-whatsapp.svg" "$CANDY/leocamp-whatsapp.svg"
 install -m644 "$HERE/leocamp-localsend.svg" "$CANDY/leocamp-localsend.svg"
+install -m644 "$HERE/leocamp-vscode.svg" "$CANDY/leocamp-vscode.svg"
 gtk-update-icon-cache -q -f "$DATA/icons/candy-icons" 2>/dev/null || true
 
 mkdir -p "$DATA/applications"
@@ -23,6 +24,11 @@ for desktop in /var/lib/snapd/desktop/applications/localsend_localsend.desktop; 
 	[ -f "$desktop" ] || continue
 	sed 's|^Icon=.*|Icon=leocamp-localsend|' "$desktop" >"$DATA/applications/$(basename "$desktop")"
 done
+for desktop in /var/lib/snapd/desktop/applications/code_code.desktop \
+	/var/lib/snapd/desktop/applications/code_code-url-handler.desktop; do
+	[ -f "$desktop" ] || continue
+	sed 's|^Icon=.*|Icon=leocamp-vscode|' "$desktop" >"$DATA/applications/$(basename "$desktop")"
+done
 # WhatsApp Web is a Brave web app: its launcher already lives in the home.
 # Brave may rewrite it when the app is reinstalled; rerun this script then.
 for desktop in "$DATA"/applications/brave-*.desktop; do
@@ -31,4 +37,4 @@ for desktop in "$DATA"/applications/brave-*.desktop; do
 done
 update-desktop-database -q "$DATA/applications" 2>/dev/null || true
 echo "Icone Terminale e App Center installate in Candy."
-echo "Per annullare: rm $DATA/applications/snap-store_snap-store.desktop $CANDY/org.gnome.Ptyxis.svg $CANDY/leocamp-app-center.svg"
+echo "Per annullare: rm $DATA/applications/snap-store_snap-store.desktop $CANDY/org.gnome.Ptyxis.svg $CANDY/leocamp-app-center.svg $DATA/applications/code_code*.desktop $CANDY/leocamp-vscode.svg"
