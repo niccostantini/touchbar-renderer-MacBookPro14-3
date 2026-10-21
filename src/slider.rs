@@ -204,6 +204,8 @@ const DEFAULT_STEP: f64 = 1.0 / 16.0;
 const SETTLE_QUIET: Duration = Duration::from_millis(120);
 /// ...or when nothing happened at all within this time.
 const SETTLE_TIMEOUT: Duration = Duration::from_millis(800);
+/// Wait per press while leaving a saturated limit.
+const LIMIT_SETTLE: Duration = Duration::from_millis(250);
 const CHANGE_EPSILON: f64 = 0.002;
 const TARGET_TIMEOUT: Duration = Duration::from_secs(6);
 const EXTREME_PRESSES: u8 = 3;
@@ -211,6 +213,8 @@ const EXTREME_PRESSES: u8 = 3;
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Awaiting {
     before: f64,
+    /// Sent while the backlight sat at its maximum, moving down.
+    leaving_limit: bool,
     sent_at: Duration,
     last_value: f64,
     last_change_at: Option<Duration>,
@@ -295,6 +299,14 @@ impl DisplayStepper {
                     self.target_since = now;
                     self.awaiting = None;
                 }
+                // Leaving a hardware limit: GNOME's level moves past the point
+                // where the backlight saturates, so the first presses show no
+                // change. That is expected, not a lost key: move on quickly.
+                None if awaiting.leaving_limit
+                    && now.saturating_sub(awaiting.sent_at) >= LIMIT_SETTLE =>
+                {
+                    self.awaiting = None;
+                }
                 None if now.saturating_sub(awaiting.sent_at) >= SETTLE_TIMEOUT => {
                     // No effect: at the limit, or the key was not applied.
                     self.stalled += 1;
@@ -332,8 +344,11 @@ impl DisplayStepper {
             self.target = None;
             return None;
         }
+        // Only the top saturates (GNOME's 0% keeps the backlight on).
+        let leaving_limit = direction == StepDirection::Down && actual >= 1.0 - CHANGE_EPSILON;
         self.awaiting = Some(Awaiting {
             before: actual,
+            leaving_limit,
             sent_at: now,
             last_value: actual,
             last_change_at: None,
@@ -473,6 +488,33 @@ mod tests {
             }
         }
         assert!(level > 0.97, "{level}");
+    }
+
+    #[test]
+    fn leaving_the_top_is_not_slowed_by_silent_presses() {
+        // GNOME saturates the backlight: the first two Down presses from the
+        // top change nothing, then each press lowers it by 0.05.
+        let mut stepper = DisplayStepper::default();
+        stepper.set_target(0.8, Duration::ZERO);
+        let mut level: f64 = 1.0;
+        let mut silent = 2;
+        let mut finished = None;
+        for tick in 0..2_000 {
+            let now = ms(tick * 10);
+            if let Some(StepDirection::Down) = stepper.poll(now, level) {
+                if silent > 0 {
+                    silent -= 1;
+                } else {
+                    level -= 0.05;
+                }
+            }
+            if !stepper.busy() {
+                finished = Some(now);
+                break;
+            }
+        }
+        assert!((level - 0.8).abs() <= 0.05, "{level}");
+        assert!(finished.unwrap() < ms(2_000), "{finished:?}");
     }
 
     #[test]
