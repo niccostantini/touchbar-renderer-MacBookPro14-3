@@ -1,0 +1,11 @@
+{
+  "name": "ui-leocamp-dark",
+  "displayName": "Leo Camp Scuro",
+  "theme": "ui",
+  "version": "1.0.0",
+  "description": "Leo Camp: crema e nero, gradiente magenta → arancio (abbinato al tema GNOME).",
+  "license": "MIT",
+  "engines": {
+    "mailspring": "*"
+  }
+}

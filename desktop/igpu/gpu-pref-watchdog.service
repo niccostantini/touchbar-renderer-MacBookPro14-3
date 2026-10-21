@@ -1,0 +1,10 @@
+[Unit]
+Description=gpu-pref: rimette la Radeon se l'avvio di prova non viene confermato
+ConditionPathExists=/var/lib/gpu-pref/armed
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/gpu-pref watchdog
+
+[Install]
+WantedBy=multi-user.target

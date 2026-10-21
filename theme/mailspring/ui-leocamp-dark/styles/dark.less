@@ -1,0 +1,14 @@
+// Icons in Mailspring are black masks drawn for light themes (as ui-dark).
+@import 'ui-variables';
+
+.thread-icon:not(.thread-icon-unread):not(.thread-icon-star),
+img.content-dark,
+img.content-light {
+  filter: invert(100%);
+}
+.mail-label {
+  filter: contrast(110%) brightness(85%);
+}
+.thread-list .list-item:not(.unread):not(.selected):not(.focused) {
+  color: #b9a9bf;
+}

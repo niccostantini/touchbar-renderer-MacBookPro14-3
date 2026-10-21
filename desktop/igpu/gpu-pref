@@ -1,0 +1,167 @@
+#!/bin/sh
+# GPU con cui il firmware del MacBookPro14,3 avvia il sistema (variabile EFI
+# gpu-power-prefs, la stessa che usa macOS). Senza --apply non scrive niente.
+#
+# Uso:
+#   gpu-pref status                    stato attuale (sola lettura)
+#   sudo gpu-pref set igpu|dgpu [--apply]
+#   sudo gpu-pref arm [--apply]        arma il paracadute per il prossimo avvio
+#   sudo gpu-pref confirm              l'avvio di prova va bene: disarma
+#   gpu-pref log                       cronologia delle operazioni
+#   gpu-pref watchdog                  (lo lancia gpu-pref-watchdog.service)
+set -eu
+
+VAR=/sys/firmware/efi/efivars/gpu-power-prefs-fa4ce28d-b62f-4c99-9cc3-6815686e30f9
+STATE=/var/lib/gpu-pref
+ARMED=$STATE/armed
+LOG=$STATE/log
+TIMEOUT=300
+DGPU=/sys/bus/pci/devices/0000:01:00.0
+
+say() {
+	echo "$*"
+	logger -t gpu-pref -- "$*" 2>/dev/null || true
+	if [ "$(id -u)" = 0 ]; then
+		mkdir -p "$STATE"
+		echo "$(date '+%F %T') $*" >>"$LOG"
+	fi
+}
+
+need_root() { [ "$(id -u)" = 0 ] || { echo "Serve sudo"; exit 1; }; }
+
+hex() { od -An -tx1 "$1" | tr -s ' ' | sed 's/^ //'; }
+
+# 4 byte di attributi + 4 byte di valore: 1 = Intel, 0 = Radeon.
+current() { od -An -tu4 -j4 -N4 "$VAR" | tr -d ' '; }
+
+name() {
+	case "$1" in
+	1) echo "igpu (Intel)" ;;
+	0) echo "dgpu (Radeon)" ;;
+	*) echo "sconosciuto ($1)" ;;
+	esac
+}
+
+payload() {
+	case "$1" in
+	igpu) printf '\007\000\000\000\001\000\000\000' ;;
+	dgpu) printf '\007\000\000\000\000\000\000\000' ;;
+	esac
+}
+
+# Scrive la variabile e la rilegge. Ritorna 1 se non è andata.
+write_pref() {
+	want=$1
+	case "$want" in igpu) wantv=1 ;; dgpu) wantv=0 ;; esac
+	mkdir -p "$STATE"
+	if [ ! -f "$STATE/original.bin" ]; then
+		cp "$VAR" "$STATE/original.bin"
+		say "backup del valore originale: $STATE/original.bin ($(hex "$STATE/original.bin"))"
+	fi
+	tmp=$(mktemp)
+	payload "$want" >"$tmp"
+	chattr -i "$VAR"
+	if ! cat "$tmp" >"$VAR"; then
+		rm -f "$tmp"
+		chattr +i "$VAR" 2>/dev/null || true
+		say "ERRORE: il firmware ha rifiutato la scrittura (nessuna modifica)"
+		return 1
+	fi
+	rm -f "$tmp"
+	chattr +i "$VAR" 2>/dev/null || true
+	got=$(current)
+	if [ "$got" != "$wantv" ]; then
+		say "ERRORE: riletto $(name "$got"), atteso $(name "$wantv")"
+		return 1
+	fi
+	say "scritto: $(name "$got") [$(hex "$VAR")]"
+}
+
+status() {
+	echo "Variabile EFI:     $(name "$(current)")   [$(hex "$VAR")]"
+	for c in /sys/class/drm/card*-eDP-*; do
+		card=${c##*/}
+		card=${card%%-*}
+		drv=$(basename "$(readlink -f "/sys/class/drm/$card/device/driver")")
+		echo "Schermo interno:   ${c##*/} su $drv, $(cat "$c/status")"
+	done
+	echo "Radeon (runtime):  $(cat "$DGPU/power/runtime_status")"
+	echo "Retroilluminaz.:   $(ls /sys/class/backlight | tr '\n' ' ')"
+	if [ -f "$ARMED" ]; then
+		echo "Paracadute:        ARMATO (al prossimo avvio: ${TIMEOUT}s per 'sudo gpu-pref confirm')"
+	else
+		echo "Paracadute:        disarmato"
+	fi
+	en=$(systemctl is-enabled gpu-pref-watchdog.service 2>/dev/null) || en="non installato"
+	ac=$(systemctl is-active gpu-pref-watchdog.service 2>/dev/null) || true
+	echo "Servizio watchdog: $en / $ac"
+	bat=$(upower -e 2>/dev/null | grep -m1 BAT || true)
+	if [ -n "$bat" ]; then
+		upower -i "$bat" | awk '/state:|energy-rate:/ {printf "Batteria:          %s %s\n", $1, $2 " " $3}'
+	fi
+}
+
+cmd=${1:-status}
+apply=no
+for a in "$@"; do [ "$a" = --apply ] && apply=yes; done
+
+case "$cmd" in
+status) status ;;
+log) cat "$LOG" 2>/dev/null || echo "(nessuna operazione registrata)" ;;
+set)
+	want=${2:-}
+	case "$want" in igpu | dgpu) ;; *) echo "Uso: gpu-pref set igpu|dgpu [--apply]"; exit 1 ;; esac
+	echo "Ora:      $(name "$(current)")   [$(hex "$VAR")]"
+	echo "Scriverei: $want   [$(payload "$want" | od -An -tx1 | tr -s ' ' | sed 's/^ //')]"
+	echo "File:     $VAR"
+	echo "Passi:    backup in $STATE/original.bin (se manca), chattr -i, scrittura, chattr +i, rilettura"
+	if [ "$apply" = no ]; then
+		echo "PROVA A SECCO: non ho scritto niente. Aggiungi --apply per farlo davvero."
+		exit 0
+	fi
+	need_root
+	write_pref "$want"
+	echo "Effetto al prossimo riavvio."
+	;;
+arm)
+	echo "Armerei: $ARMED"
+	echo "Al prossimo avvio, se entro ${TIMEOUT}s non lanci 'sudo gpu-pref confirm',"
+	echo "il watchdog rimette la Radeon e riavvia (una volta sola)."
+	systemctl is-enabled --quiet gpu-pref-watchdog.service 2>/dev/null ||
+		{ echo "ATTENZIONE: gpu-pref-watchdog.service non è abilitato: prima install.sh"; exit 1; }
+	if [ "$apply" = no ]; then
+		echo "PROVA A SECCO: non ho armato niente. Aggiungi --apply per farlo davvero."
+		exit 0
+	fi
+	need_root
+	mkdir -p "$STATE"
+	touch "$ARMED"
+	say "paracadute armato (valore attuale: $(name "$(current)"))"
+	;;
+confirm)
+	need_root
+	rm -f "$ARMED"
+	systemctl stop gpu-pref-watchdog.service 2>/dev/null || true
+	say "confermato: paracadute disarmato con $(name "$(current)")"
+	;;
+watchdog)
+	need_root
+	[ -f "$ARMED" ] || exit 0
+	say "watchdog: avvio di prova con $(name "$(current)"), attendo ${TIMEOUT}s la conferma"
+	sleep "$TIMEOUT"
+	[ -f "$ARMED" ] || exit 0
+	say "watchdog: nessuna conferma, rimetto la Radeon"
+	if write_pref dgpu; then
+		rm -f "$ARMED"
+		say "watchdog: riavvio"
+		systemctl reboot
+	else
+		say "watchdog: ripristino FALLITO, non riavvio (usa il reset NVRAM)"
+		exit 1
+	fi
+	;;
+*)
+	sed -n '2,13p' "$0"
+	exit 1
+	;;
+esac

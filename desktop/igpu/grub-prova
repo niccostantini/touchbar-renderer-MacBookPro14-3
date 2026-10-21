@@ -1,0 +1,99 @@
+#!/bin/sh
+# Avvio di prova con un parametro del kernel in più, valido per UN solo avvio.
+# La voce di prova sta in /boot/grub/custom.cfg (letto da 41_custom), copiata
+# dalla prima voce di grub.cfg: niente update-grub, /etc/default/grub intatto.
+# GRUB cancella next_entry appena lo usa: al riavvio dopo torna la voce normale.
+#
+# Uso (tutto con sudo, perché grub.cfg è leggibile solo da root):
+#   sudo grub-prova mostra              voce attuale e voce di prova (sola lettura)
+#   sudo grub-prova prepara [--apply]   scrive /boot/grub/custom.cfg
+#   sudo grub-prova avvia [--apply]     il PROSSIMO avvio usa la voce di prova
+#   sudo grub-prova annulla             toglie la scelta "prossimo avvio"
+#   sudo grub-prova rimuovi             cancella /boot/grub/custom.cfg
+set -eu
+
+PARAM=${GRUB_PROVA_PARAM:-amdgpu.runpm=1}
+ID=gpu-prova
+CFG=/boot/grub/grub.cfg
+CUSTOM=/boot/grub/custom.cfg
+ENV=/boot/grub/grubenv
+
+[ "$(id -u)" = 0 ] || { echo "Serve sudo"; exit 1; }
+
+# Prima voce di grub.cfg = quella che parte oggi (GRUB_DEFAULT=0).
+first_entry() { awk '/^menuentry /{p=1} p{print} p&&/^}/{exit}' "$CFG"; }
+
+test_entry() {
+	first_entry | sed \
+		-e "1s/^menuentry .*{\$/menuentry 'Ubuntu (prova $PARAM)' --id $ID {/" \
+		-e "/^[[:space:]]*linux[[:space:]]/s/\$/ $PARAM/"
+}
+
+apply=no
+for a in "$@"; do [ "$a" = --apply ] && apply=yes; done
+
+case "${1:-mostra}" in
+mostra)
+	echo "=== Voce attuale (prima di $CFG)"
+	first_entry
+	echo
+	echo "=== Voce di prova che scriverei in $CUSTOM"
+	test_entry
+	echo
+	echo "=== Differenze"
+	first_entry >/tmp/grub-prova.a
+	test_entry >/tmp/grub-prova.b
+	diff /tmp/grub-prova.a /tmp/grub-prova.b || true
+	rm -f /tmp/grub-prova.a /tmp/grub-prova.b
+	echo
+	echo "=== Ambiente GRUB"
+	grub-editenv "$ENV" list
+	[ -e "$CUSTOM" ] && echo "(esiste già $CUSTOM)" || echo "($CUSTOM non esiste)"
+	;;
+prepara)
+	tmp=$(mktemp)
+	test_entry >"$tmp"
+	grep -q "^menuentry 'Ubuntu (prova $PARAM)' --id $ID {" "$tmp" || { echo "ERRORE: titolo non sostituito"; rm -f "$tmp"; exit 1; }
+	[ "$(grep -c " $PARAM\$" "$tmp")" = 1 ] || { echo "ERRORE: riga linux non trovata"; rm -f "$tmp"; exit 1; }
+	grub-script-check "$tmp" || { echo "ERRORE: sintassi GRUB non valida"; rm -f "$tmp"; exit 1; }
+	echo "Voce di prova controllata (sintassi GRUB OK)."
+	if [ -e "$CUSTOM" ] && ! cmp -s "$tmp" "$CUSTOM"; then
+		echo "ATTENZIONE: $CUSTOM esiste già con altro contenuto: non lo tocco."
+		rm -f "$tmp"
+		exit 1
+	fi
+	if [ "$apply" = no ]; then
+		rm -f "$tmp"
+		echo "PROVA A SECCO: non ho scritto niente. Aggiungi --apply per farlo davvero."
+		exit 0
+	fi
+	install -m644 "$tmp" "$CUSTOM"
+	rm -f "$tmp"
+	echo "Scritto $CUSTOM. Gli avvii normali non cambiano: la voce di prova va scelta con 'avvia'."
+	;;
+avvia)
+	[ -e "$CUSTOM" ] || { echo "Prima: sudo grub-prova prepara --apply"; exit 1; }
+	echo "Imposterei: next_entry=$ID in $ENV (vale solo per il prossimo avvio)"
+	if [ "$apply" = no ]; then
+		echo "PROVA A SECCO: non ho impostato niente. Aggiungi --apply per farlo davvero."
+		exit 0
+	fi
+	grub-editenv "$ENV" set next_entry=$ID
+	grub-editenv "$ENV" list
+	echo "Al prossimo riavvio: voce di prova. A quello dopo: voce normale."
+	;;
+annulla)
+	grub-editenv "$ENV" unset next_entry
+	grub-editenv "$ENV" list
+	echo "Il prossimo avvio è quello normale."
+	;;
+rimuovi)
+	grub-editenv "$ENV" unset next_entry
+	rm -f "$CUSTOM"
+	echo "Rimosso $CUSTOM: GRUB è come prima."
+	;;
+*)
+	sed -n '2,14p' "$0"
+	exit 1
+	;;
+esac

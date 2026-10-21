@@ -1,0 +1,17 @@
+#!/bin/sh
+# Assorbimento medio dalla batteria (W) su N secondi, campionando ogni 2 s.
+# Uso: misura [secondi]   (default 60; lascia il Mac fermo mentre misura)
+set -eu
+B=/sys/class/power_supply/BAT0
+[ "$(cat $B/status)" = Discharging ] || { echo "Stacca il caricatore: misuro solo a batteria"; exit 1; }
+n=$(( ${1:-60} / 2 ))
+i=0
+tot=0
+while [ $i -lt "$n" ]; do
+	uw=$(( $(cat $B/voltage_now) / 1000 * ($(cat $B/current_now) / 1000) ))
+	tot=$((tot + uw))
+	i=$((i + 1))
+	sleep 2
+done
+echo "$tot $n" | awk '{printf "Media su %d campioni: %.1f W\n", $2, $1 / $2 / 1e6}'
+echo "Radeon: $(cat /sys/bus/pci/devices/0000:01:00.0/power/runtime_status)"

@@ -1,0 +1,93 @@
+// Leo Camp rules shared by the light and dark Mailspring themes: thick ink
+// outlines with a hard magenta shadow, the magenta to orange gradient on the
+// main buttons and Fraunces italic for the subject, as in the GTK theme.
+@import 'ui-variables';
+
+.sheet-toolbar-container,
+.sheet-toolbar {
+  background: @toolbar-background-color;
+  box-shadow: none;
+}
+
+.account-sidebar,
+.column-RootSidebar {
+  background: @panel-background-color;
+}
+
+.outline-view .item-container .item.selected,
+.outline-view .item-container.selected .item {
+  background: @leo-chip-strong;
+  border-radius: 8px;
+  .name { color: @text-color; font-weight: 700; }
+}
+
+.outline-view .item-count-box {
+  background-image: linear-gradient(90deg, @leo-g1, @leo-g2);
+  color: #fff;
+  box-shadow: none;
+  border: none;
+  font-weight: 700;
+}
+
+.btn.btn-emphasis,
+.btn.btn-send,
+.btn.btn-emphasis:hover,
+.btn.btn-send:hover {
+  background-image: linear-gradient(90deg, @leo-g1, @leo-g2);
+  color: #fff;
+  border: 2px solid @leo-line;
+  box-shadow: 3px 3px 0 0 @leo-line;
+  font-weight: 800;
+  img.content-mask { background-color: #fff; }
+}
+.btn.btn-emphasis:hover,
+.btn.btn-send:hover {
+  background-image: linear-gradient(90deg, @leo-g2, @leo-g1);
+}
+.btn.btn-emphasis:active,
+.btn.btn-send:active {
+  box-shadow: none;
+  transform: translate(2px, 2px);
+}
+
+.message-subject,
+.message-subject-wrap .message-subject {
+  font-family: @font-family-heading;
+  font-style: italic;
+  font-weight: 700;
+}
+
+#message-list .message-item-wrap .message-item-white-wrap {
+  border: 2px solid @leo-line;
+  border-radius: 12px;
+  box-shadow: 5px 5px 0 0 @leo-g1;
+  overflow: hidden;
+}
+#message-list .message-item-wrap.collapsed .message-item-white-wrap {
+  box-shadow: 3px 3px 0 0 @leo-g1;
+}
+
+.fixed-popover,
+.menu,
+.dropdown-menu {
+  border: 2px solid @leo-line;
+  border-radius: 12px;
+  box-shadow: 5px 5px 0 0 @leo-g1;
+}
+
+.thread-list .list-item.focused,
+.thread-list .list-item.focused.selected {
+  background: @list-focused-bg;
+  color: #fff;
+}
+
+input[type='text'],
+input[type='search'],
+input[type='email'],
+.search-bar .header-container {
+  border-radius: 8px;
+}
+
+::selection {
+  background: fade(@leo-g1, 35%);
+}

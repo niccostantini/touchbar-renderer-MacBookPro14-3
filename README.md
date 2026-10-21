@@ -139,3 +139,7 @@ sudo apt install gnome-shell-extensions papirus-icon-theme   # una volta
 sh theme/install.sh                                          # poi logout/login
 sh ~/.config/leocamp/restore.sh                              # per tornare com'era
 ```
+
+Mailspring (snap) ha due temi abbinati, chiaro e scuro, in modalità
+"Automatico" (segue lo stile di GNOME): `sh theme/mailspring/install.sh`,
+poi chiudere e riaprire Mailspring; `--undo` per tornare com'era.
