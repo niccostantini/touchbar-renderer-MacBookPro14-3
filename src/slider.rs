@@ -205,6 +205,7 @@ const SETTLE_QUIET: Duration = Duration::from_millis(60);
 /// ...or when nothing happened at all within this time.
 const SETTLE_TIMEOUT: Duration = Duration::from_millis(350);
 const CHANGE_EPSILON: f64 = 0.002;
+const TARGET_TIMEOUT: Duration = Duration::from_secs(6);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Awaiting {
@@ -225,6 +226,9 @@ pub struct DisplayStepper {
     step: f64,
     awaiting: Option<Awaiting>,
     stalled: u8,
+    /// When the target was set: a target never reached is dropped after
+    /// TARGET_TIMEOUT, so the slider falls back to showing the real level.
+    target_since: Duration,
 }
 
 impl Default for DisplayStepper {
@@ -234,13 +238,15 @@ impl Default for DisplayStepper {
             step: DEFAULT_STEP,
             awaiting: None,
             stalled: 0,
+            target_since: Duration::ZERO,
         }
     }
 }
 
 impl DisplayStepper {
-    pub fn set_target(&mut self, fraction: f64) {
+    pub fn set_target(&mut self, fraction: f64, now: Duration) {
         self.target = Some(fraction.clamp(0.0, 1.0));
+        self.target_since = now;
         self.stalled = 0;
     }
 
@@ -256,6 +262,11 @@ impl DisplayStepper {
 
     /// Feeds the current level; returns a key to press now, if any.
     pub fn poll(&mut self, now: Duration, actual: f64) -> Option<StepDirection> {
+        if self.target.is_some() && now.saturating_sub(self.target_since) >= TARGET_TIMEOUT {
+            self.target = None;
+            self.awaiting = None;
+            return None;
+        }
         if let Some(mut awaiting) = self.awaiting {
             if (actual - awaiting.last_value).abs() > CHANGE_EPSILON {
                 awaiting.last_value = actual;
@@ -379,7 +390,7 @@ mod tests {
     /// Simulated GNOME: each key moves the level by `step` after `lag`.
     fn run_stepper(start: f64, target: f64, step: f64) -> (f64, usize) {
         let mut stepper = DisplayStepper::default();
-        stepper.set_target(target);
+        stepper.set_target(target, Duration::ZERO);
         let mut level = start;
         let mut pending: Vec<(Duration, f64)> = Vec::new();
         let mut presses = 0;

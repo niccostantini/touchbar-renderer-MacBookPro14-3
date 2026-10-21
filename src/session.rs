@@ -431,9 +431,11 @@ impl Session {
             .input
             .ingest(&frame, self.overlay_state, self.now, |kind| match kind {
                 SliderKind::Volume => volume.map_or(0.0, |value| f64::from(value) / 100.0),
-                SliderKind::Display => stepping
-                    .or_else(|| display.and_then(LevelSource::fraction))
-                    .unwrap_or(0.5),
+                SliderKind::Display => crate::levels::display_to_gnome(
+                    stepping
+                        .or_else(|| display.and_then(LevelSource::fraction))
+                        .unwrap_or(0.5),
+                ),
                 SliderKind::Keyboard => keyboard.and_then(LevelSource::fraction).unwrap_or(0.5),
             })
             .map_err(|_| RendererError::Gesture)?;
@@ -460,7 +462,9 @@ impl Session {
                 self.volume_set_at = Some(self.now);
             }
             SliderKind::Keyboard => self.keyboard.set(to_percent(fraction)),
-            SliderKind::Display => self.stepper.set_target(fraction),
+            SliderKind::Display => self
+                .stepper
+                .set_target(crate::levels::display_from_gnome(fraction), self.now),
         }
     }
 
@@ -969,7 +973,7 @@ impl Session {
             )?;
         }
         if showing {
-            let shown = self.stepper.target().unwrap_or(actual);
+            let shown = crate::levels::display_to_gnome(self.stepper.target().unwrap_or(actual));
             self.dirty |= self
                 .input
                 .slider_mut()

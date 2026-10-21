@@ -63,6 +63,35 @@ impl LevelSource {
     }
 }
 
+/// GNOME 50's brightness slider against the gmux backlight of this Mac,
+/// measured at 0/25/50/75/100% (GNOME uses a perceptual scale).
+const GNOME_TO_HARDWARE: [(f64, f64); 5] =
+    [(0.0, 0.0), (0.25, 0.351), (0.5, 0.659), (0.75, 0.899), (1.0, 1.0)];
+
+fn interpolate(value: f64, table: impl Iterator<Item = (f64, f64)> + Clone) -> f64 {
+    let value = value.clamp(0.0, 1.0);
+    let points: Vec<_> = table.collect();
+    for pair in points.windows(2) {
+        let ((x0, y0), (x1, y1)) = (pair[0], pair[1]);
+        if value <= x1 {
+            return y0 + (y1 - y0) * (value - x0) / (x1 - x0);
+        }
+    }
+    value
+}
+
+/// Display level as GNOME shows it, from the hardware fraction.
+#[must_use]
+pub fn display_to_gnome(hardware: f64) -> f64 {
+    interpolate(hardware, GNOME_TO_HARDWARE.iter().map(|&(g, h)| (h, g)))
+}
+
+/// Hardware fraction for a level on GNOME's scale.
+#[must_use]
+pub fn display_from_gnome(gnome: f64) -> f64 {
+    interpolate(gnome, GNOME_TO_HARDWARE.iter().copied())
+}
+
 fn read_number(path: &Path) -> Option<u32> {
     fs::read_to_string(path).ok()?.trim().parse().ok()
 }
@@ -93,6 +122,15 @@ mod tests {
         let source = LevelSource::discover(&root, |name| name.ends_with("kbd_backlight")).unwrap();
         assert!((source.fraction().unwrap() - 0.25).abs() < 1e-9);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn gnome_scale_round_trips() {
+        assert!((display_from_gnome(0.5) - 0.659).abs() < 1e-9);
+        assert!((display_to_gnome(0.659) - 0.5).abs() < 1e-9);
+        for value in [0.0, 0.1, 0.3, 0.62, 0.9, 1.0] {
+            assert!((display_to_gnome(display_from_gnome(value)) - value).abs() < 1e-9);
+        }
     }
 
     #[test]
