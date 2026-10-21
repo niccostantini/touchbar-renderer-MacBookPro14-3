@@ -15,7 +15,8 @@ soluzioni) è in **[docs/PROCESSO.md](docs/PROCESSO.md)**.
 - **Esc** sempre a sinistra; con **Fn** premuto: Esc, F1–F12.
 - **Ritaglio** apre lo strumento screenshot di GNOME (tasto Stamp).
 - **Lucchetto** blocca lo schermo; **luna** = Non disturbare di GNOME.
-- **Bluetooth** acceso/spento (blu quando è acceso), come l'interruttore di GNOME.
+- **Bluetooth** acceso/spento (blu quando è acceso), come l'interruttore di GNOME;
+  tenuto premuto mezzo secondo apre l'elenco dei dispositivi.
 - **Microfono**: compare solo mentre un'app registra; rosso e barrato se muto.
 - **Brano in riproduzione** (MPRIS): tocca per pausa, trascina per spostarti.
 - **Sole / tastiera / volume** aprono uno slider a tutta barra: tocca, oppure
@@ -55,6 +56,13 @@ Tenendo premuto il lucchetto per 1,8 secondi la barra si riempie e blocca lo sch
 
 ![Tieni premuto per bloccare](docs/img/9-tieni-premuto-per-bloccare.png)
 
+Tenendo premuto il tasto Bluetooth si apre l'elenco dei dispositivi: prima
+quelli associati (in blu quelli connessi), poi quelli rilevati nelle vicinanze
+(più scuri). Un tocco connette, disconnette o associa; mentre il comando è in
+corso il dispositivo è blu scuro. Se il Bluetooth è spento viene acceso:
+
+![Dispositivi Bluetooth](docs/img/10-dispositivi-bluetooth.png)
+
 Le immagini si rigenerano con `cargo run --release --bin preview -- docs/img`.
 
 ## Installazione
@@ -88,6 +96,7 @@ rm ~/.config/t1bridge/renderer && systemctl --user restart t1-touchbar.service
 | `src/input.rs` | Tocchi → tap, slider, trascinamento sul brano, Touch ID |
 | `src/slider.rs` | Stato degli slider, chiusura automatica, passi di luminosità |
 | `src/context.rs` | Thread di contesto: player, volume, microfono, blocco schermo |
+| `src/bluetooth.rs` | Dispositivi Bluetooth (BlueZ via `busctl`, comandi con `bluetoothctl`) |
 | `src/mpris.rs`, `src/audio.rs`, `src/screen.rs`, `src/system.rs` | Integrazione con GNOME/PipeWire via `busctl`, `wpctl`, `gsettings`, `loginctl` |
 | `src/levels.rs` | Livelli di luminosità letti da sysfs |
 | `src/text.rs` | Testo con i font di sistema (`fontdue`) |

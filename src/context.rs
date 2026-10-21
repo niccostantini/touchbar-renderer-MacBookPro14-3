@@ -14,6 +14,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::audio::{self, Audio, Microphone, Output};
+use crate::bluetooth::{self, Device, Scan};
 use crate::mpris::{self, NowPlaying};
 use crate::screen;
 
@@ -24,6 +25,10 @@ const AUDIO_FAST_INTERVAL: Duration = Duration::from_millis(300);
 const MICROPHONE_INTERVAL: Duration = Duration::from_secs(1);
 /// Output list refresh without a request (plugging a dock changes it).
 const OUTPUTS_INTERVAL: Duration = Duration::from_secs(10);
+/// Bluetooth devices are read only while their picker is open.
+const DEVICES_INTERVAL: Duration = Duration::from_secs(1);
+/// Time for a just-powered adapter to accept a scan.
+const POWER_ON_DELAY: Duration = Duration::from_millis(1_500);
 /// Lock state also re-read without signals, in case one is missed.
 const SCREEN_FALLBACK: Duration = Duration::from_secs(15);
 /// Signals come in bursts (several properties at once); coalesce them.
@@ -43,6 +48,8 @@ pub struct Snapshot {
     pub outputs: Vec<Output>,
     /// `Some(on)` when the Mac has Bluetooth.
     pub bluetooth: Option<bool>,
+    /// Bluetooth devices for the picker, refreshed while it is open.
+    pub devices: Vec<Device>,
 }
 
 impl Snapshot {
@@ -58,6 +65,7 @@ impl Snapshot {
             && self.screen_off == other.screen_off
             && self.outputs == other.outputs
             && self.bluetooth == other.bluetooth
+            && self.devices == other.devices
     }
 }
 
@@ -68,6 +76,7 @@ struct Parts {
     microphone: bool,
     screen: bool,
     outputs: bool,
+    devices: bool,
 }
 
 const PLAYERS: Parts = Parts {
@@ -76,6 +85,7 @@ const PLAYERS: Parts = Parts {
     microphone: false,
     screen: false,
     outputs: false,
+    devices: false,
 };
 const AUDIO: Parts = Parts {
     players: false,
@@ -83,6 +93,7 @@ const AUDIO: Parts = Parts {
     microphone: false,
     screen: false,
     outputs: false,
+    devices: false,
 };
 const MICROPHONE: Parts = Parts {
     players: false,
@@ -90,6 +101,7 @@ const MICROPHONE: Parts = Parts {
     microphone: true,
     screen: false,
     outputs: false,
+    devices: false,
 };
 const OUTPUTS: Parts = Parts {
     players: false,
@@ -97,6 +109,7 @@ const OUTPUTS: Parts = Parts {
     microphone: false,
     screen: false,
     outputs: true,
+    devices: false,
 };
 const SCREEN: Parts = Parts {
     players: false,
@@ -104,6 +117,16 @@ const SCREEN: Parts = Parts {
     microphone: false,
     screen: true,
     outputs: false,
+    devices: false,
+};
+
+const DEVICES: Parts = Parts {
+    players: false,
+    audio: false,
+    microphone: false,
+    screen: false,
+    outputs: false,
+    devices: true,
 };
 
 /// Handle to the poller; cheap to clone.
@@ -113,6 +136,9 @@ pub struct Context {
     refresh: Sender<Parts>,
     volume: Sender<u8>,
     fast_audio: Arc<AtomicBool>,
+    /// The Bluetooth picker is open: devices are polled and discovery runs.
+    devices_open: Arc<AtomicBool>,
+    scan: Arc<Mutex<Option<Scan>>>,
 }
 
 impl Context {
@@ -120,11 +146,13 @@ impl Context {
     pub fn start() -> Self {
         let latest = Arc::new(Mutex::new((0, Snapshot::default())));
         let fast_audio = Arc::new(AtomicBool::new(false));
+        let devices_open = Arc::new(AtomicBool::new(false));
         let (refresh, requests) = mpsc::channel();
 
         let shared = Arc::clone(&latest);
         let fast = Arc::clone(&fast_audio);
-        thread::spawn(move || poll_forever(&shared, &requests, &fast));
+        let open = Arc::clone(&devices_open);
+        thread::spawn(move || poll_forever(&shared, &requests, &fast, &open));
 
         let watcher = refresh.clone();
         thread::spawn(move || {
@@ -154,6 +182,8 @@ impl Context {
             refresh,
             volume,
             fast_audio,
+            devices_open,
+            scan: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -190,6 +220,43 @@ impl Context {
 
     pub fn set_bluetooth(&self, on: bool) {
         self.command(MICROPHONE, move || audio::set_bluetooth(on));
+    }
+
+    /// Opening the Bluetooth picker powers the adapter on if needed and
+    /// starts discovery; closing it stops discovery.
+    pub fn set_devices_open(&self, open: bool) {
+        if self.devices_open.swap(open, Ordering::Relaxed) == open {
+            return;
+        }
+        if !open {
+            if let Ok(mut scan) = self.scan.lock() {
+                scan.take();
+            }
+            return;
+        }
+        let _ = self.refresh.send(DEVICES);
+        let (still_open, scan, refresh) = (
+            Arc::clone(&self.devices_open),
+            Arc::clone(&self.scan),
+            self.refresh.clone(),
+        );
+        thread::spawn(move || {
+            if audio::bluetooth() == Some(false) {
+                audio::set_bluetooth(true);
+                let _ = refresh.send(MICROPHONE);
+                thread::sleep(POWER_ON_DELAY);
+            }
+            if let Ok(mut scan) = scan.lock()
+                && still_open.load(Ordering::Relaxed)
+            {
+                *scan = Scan::start();
+            }
+        });
+    }
+
+    pub fn activate_device(&self, device: &Device) {
+        let device = device.clone();
+        self.command(DEVICES, move || bluetooth::activate(&device));
     }
 
     pub fn toggle_microphone(&self) {
@@ -232,13 +299,19 @@ fn volume_worker(volumes: &Receiver<u8>, refresh: &Sender<Parts>) {
     }
 }
 
-fn poll_forever(shared: &Mutex<(u64, Snapshot)>, requests: &Receiver<Parts>, fast: &AtomicBool) {
+fn poll_forever(
+    shared: &Mutex<(u64, Snapshot)>,
+    requests: &Receiver<Parts>,
+    fast: &AtomicBool,
+    devices_open: &AtomicBool,
+) {
     let mut preferred: Option<String> = None;
     let mut snapshot = Snapshot::default();
     let start = Instant::now();
     let (mut next_players, mut next_audio, mut next_microphone, mut next_screen) =
         (start, start, start, start);
     let mut next_outputs = start;
+    let mut next_devices = start;
     loop {
         let now = Instant::now();
         if now >= next_players {
@@ -263,6 +336,12 @@ fn poll_forever(shared: &Mutex<(u64, Snapshot)>, requests: &Receiver<Parts>, fas
             snapshot.outputs = audio::outputs();
             next_outputs = now + OUTPUTS_INTERVAL;
         }
+        if now >= next_devices {
+            if devices_open.load(Ordering::Relaxed) {
+                snapshot.devices = bluetooth::devices();
+            }
+            next_devices = now + DEVICES_INTERVAL;
+        }
         if now >= next_screen {
             snapshot.screen_off = screen::off();
             next_screen = now + SCREEN_FALLBACK;
@@ -278,7 +357,8 @@ fn poll_forever(shared: &Mutex<(u64, Snapshot)>, requests: &Receiver<Parts>, fas
             .min(next_audio)
             .min(next_microphone)
             .min(next_screen)
-            .min(next_outputs);
+            .min(next_outputs)
+            .min(next_devices);
         match requests.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
             Ok(first) => {
                 thread::sleep(DEBOUNCE);
@@ -289,6 +369,7 @@ fn poll_forever(shared: &Mutex<(u64, Snapshot)>, requests: &Receiver<Parts>, fas
                     parts.microphone |= more.microphone;
                     parts.screen |= more.screen;
                     parts.outputs |= more.outputs;
+                    parts.devices |= more.devices;
                 }
                 let now = Instant::now();
                 if parts.players {
@@ -305,6 +386,9 @@ fn poll_forever(shared: &Mutex<(u64, Snapshot)>, requests: &Receiver<Parts>, fas
                 }
                 if parts.outputs {
                     next_outputs = now;
+                }
+                if parts.devices {
+                    next_devices = now;
                 }
             }
             Err(RecvTimeoutError::Timeout) => {}

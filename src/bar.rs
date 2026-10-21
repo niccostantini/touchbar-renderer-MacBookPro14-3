@@ -46,9 +46,9 @@ const fn hex(value: u32) -> Rgb {
 const DISPLAY_GRADIENT: [Rgb; 3] = [hex(0xff2d00), hex(0xff9a00), hex(0xffe14d)];
 const KEYBOARD_GRADIENT: [Rgb; 3] = [hex(0xd4145a), hex(0xff5a1f), hex(0xffb347)];
 const VOLUME_GRADIENT: [Rgb; 3] = [hex(0x2b12ff), hex(0x8b3dff), hex(0xff4fd8)];
-/// The active output pill: the Leo Camp magenta to orange.
 /// Hold-to-lock bar: green to orange.
 const LOCK_GRADIENT: [Rgb; 3] = [hex(0x2ee86f), hex(0xc6d93a), hex(0xff7b2e)];
+/// The active output pill: the Leo Camp magenta to orange.
 const OUTPUT_GRADIENT: [Rgb; 3] = [hex(0xf2369b), hex(0xff5a5a), hex(0xff7b2e)];
 const PAUSED_LABEL: Rgb = rgb(150);
 const PROGRESS_FILLED: Rgb = Rgb {
@@ -67,6 +67,15 @@ const BLUETOOTH_ON_PLATE: Rgb = Rgb {
     green: 99,
     blue: 235,
 };
+/// A Bluetooth device being connected, disconnected or paired.
+const BLUETOOTH_BUSY_PLATE: Rgb = Rgb {
+    red: 30,
+    green: 58,
+    blue: 138,
+};
+/// Discovered, not yet paired devices: a dimmer pill and label.
+const DISCOVERED_PLATE: Rgb = rgb(40);
+const DISCOVERED_LABEL: Rgb = rgb(170);
 const MICROPHONE_MUTED_PRESSED: Rgb = Rgb {
     red: 204,
     green: 64,
@@ -126,7 +135,7 @@ const KNOB_RING: u32 = 6;
 const CLOSE_GLYPH: u32 = 22;
 const CLOSE_STROKE: f64 = 3.5;
 
-// Audio output picker: pills after the close button.
+// Audio output and Bluetooth device pickers: pills after the close button.
 const OUTPUTS_LEFT: u32 = 340;
 const OUTPUTS_RIGHT: u32 = 2_160;
 const OUTPUT_GAP: u32 = 16;
@@ -134,6 +143,8 @@ const OUTPUT_MAX_WIDTH: u32 = 440;
 const OUTPUT_LABEL_INSET: u32 = 20;
 /// The picker shows at most this many outputs.
 pub const MAX_OUTPUTS: usize = 4;
+/// The Bluetooth picker shows at most this many devices.
+pub const MAX_DEVICES: usize = 5;
 
 const fn rgb(level: u8) -> Rgb {
     Rgb {
@@ -171,6 +182,8 @@ pub enum Action {
     Seek(u16),
     /// Make the n-th listed audio output the default.
     SelectOutput(u8),
+    /// Connect, disconnect or pair the n-th listed Bluetooth device.
+    SelectDevice(u8),
 }
 
 /// What lies under a contact on the current surface.
@@ -197,6 +210,27 @@ pub enum Surface {
     Slider(SliderKind),
     /// The audio output picker.
     Outputs,
+    /// The Bluetooth device picker (hold the Bluetooth key).
+    Devices,
+}
+
+/// How a Bluetooth device pill is drawn.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DeviceState {
+    Connected,
+    Paired,
+    Discovered,
+    /// A command for it is running.
+    Busy,
+    /// Not a device: the "searching" note shown while the list is empty.
+    Placeholder,
+}
+
+/// One pill of the Bluetooth picker.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DevicePill {
+    pub label: TextMask,
+    pub state: DeviceState,
 }
 
 /// The now-playing area's content.
@@ -226,6 +260,8 @@ pub struct View<'a> {
     /// Pre-rendered output names for the picker, and the active one.
     pub outputs: &'a [TextMask],
     pub active_output: Option<usize>,
+    /// Bluetooth picker pills, paired devices first.
+    pub devices: &'a [DevicePill],
     /// Hold-to-lock fill, shown in place of the now-playing block.
     pub lock_progress: Option<f64>,
     /// Slider position, 0.0..=1.0, used only on the slider surface.
@@ -242,6 +278,8 @@ pub struct Contextual {
     pub outputs: u8,
     /// The Mac has a Bluetooth adapter.
     pub bluetooth: bool,
+    /// Number of Bluetooth devices listed in the picker.
+    pub devices: u8,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -288,6 +326,7 @@ impl Bar {
                     microphone: false,
                     outputs: 0,
                     bluetooth: false,
+                    devices: 0,
                 },
             })
         }
@@ -413,9 +452,9 @@ impl Bar {
         ((x - left) / width).clamp(0.0, 1.0)
     }
 
-    /// Bounds of the n-th of `count` output pills, in display pixels.
+    /// Bounds of the n-th of `count` picker pills, in display pixels.
     fn output_pill(self, index: usize, count: usize) -> Rectangle {
-        let count = u32::try_from(count.clamp(1, MAX_OUTPUTS)).unwrap_or(1);
+        let count = u32::try_from(count.clamp(1, MAX_OUTPUTS.max(MAX_DEVICES))).unwrap_or(1);
         let index = u32::try_from(index).unwrap_or(0);
         let available = OUTPUTS_RIGHT - OUTPUTS_LEFT - (count - 1) * OUTPUT_GAP;
         let width = (available / count).min(OUTPUT_MAX_WIDTH);
@@ -425,7 +464,7 @@ impl Bar {
         })
     }
 
-    /// Room for an output name inside its pill, in display pixels.
+    /// Room for an output or device name inside its pill, in display pixels.
     #[must_use]
     pub fn output_label_width(self, count: usize) -> u32 {
         self.output_pill(0, count)
@@ -491,6 +530,19 @@ impl Bar {
                     .and_then(|index| u8::try_from(index).ok())
                     .map(|index| Target::Action(Action::SelectOutput(index)))
             }
+            Surface::Devices => {
+                if self.within(self.function_slot(0), x) {
+                    return Some(Target::Action(Action::Escape));
+                }
+                if self.within_span(CLOSE_BUTTON, x) {
+                    return Some(Target::Close);
+                }
+                let count = usize::from(self.contextual.devices).min(MAX_DEVICES);
+                (0..count)
+                    .find(|index| self.within(self.output_pill(*index, count), x))
+                    .and_then(|index| u8::try_from(index).ok())
+                    .map(|index| Target::Action(Action::SelectDevice(index)))
+            }
             Surface::Slider(_) => {
                 if self.within(self.function_slot(0), x) {
                     Some(Target::Action(Action::Escape))
@@ -532,10 +584,11 @@ impl Bar {
             Surface::Normal => self.render_normal(frame, view),
             Surface::Slider(kind) => self.render_slider(frame, kind, view),
             Surface::Outputs => self.render_outputs(frame, view),
+            Surface::Devices => self.render_devices(frame, view),
         }
     }
 
-    fn render_outputs(self, frame: &mut Xrgb8888Frame<'_>, view: &View<'_>) -> Result<(), BarError> {
+    fn render_picker_close(self, frame: &mut Xrgb8888Frame<'_>, view: &View<'_>) -> Result<(), BarError> {
         let escape = Target::Action(Action::Escape);
         self.draw_plate(frame, self.function_slot(0), plate_color(escape, view))?;
         stock_art::draw_label(frame, self.function_slot(0), stock_labels::ESC, LABEL)?;
@@ -548,6 +601,60 @@ impl Bar {
             f64::from(self.height) * CLOSE_STROKE / f64::from(NATIVE_HEIGHT),
             LABEL,
         )?;
+        Ok(())
+    }
+
+    fn render_devices(self, frame: &mut Xrgb8888Frame<'_>, view: &View<'_>) -> Result<(), BarError> {
+        self.render_picker_close(frame, view)?;
+        let count = view.devices.len().min(MAX_DEVICES);
+        for (index, device) in view.devices.iter().take(count).enumerate() {
+            let pill = self.output_pill(index, count);
+            let pressed = u8::try_from(index)
+                .is_ok_and(|index| view.pressed == Some(Target::Action(Action::SelectDevice(index))));
+            let (plate, label) = match device.state {
+                DeviceState::Placeholder => (None, DISCOVERED_LABEL),
+                _ if pressed => (Some(PRESSED_PLATE), LABEL),
+                DeviceState::Connected => (Some(BLUETOOTH_ON_PLATE), LABEL),
+                DeviceState::Busy => (Some(BLUETOOTH_BUSY_PLATE), LABEL),
+                DeviceState::Paired => (Some(PLATE), LABEL),
+                DeviceState::Discovered => (Some(DISCOVERED_PLATE), DISCOVERED_LABEL),
+            };
+            if let Some(plate) = plate {
+                self.draw_plate(frame, pill, plate)?;
+            }
+            self.draw_pill_label(frame, pill, &device.label, label)?;
+        }
+        Ok(())
+    }
+
+    fn draw_pill_label(
+        self,
+        frame: &mut Xrgb8888Frame<'_>,
+        pill: Rectangle,
+        label: &TextMask,
+        color: Rgb,
+    ) -> Result<(), BarError> {
+        if label.width > 0
+            && label.width <= pill.width
+            && label.height <= self.height
+            && label.pixels.len() == (label.width * label.height) as usize
+        {
+            frame.blend_mask(
+                Rectangle {
+                    x: pill.x + (pill.width - label.width) / 2,
+                    y: (self.height - label.height) / 2,
+                    width: label.width,
+                    height: label.height,
+                },
+                &label.pixels,
+                color,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn render_outputs(self, frame: &mut Xrgb8888Frame<'_>, view: &View<'_>) -> Result<(), BarError> {
+        self.render_picker_close(frame, view)?;
         let count = view.outputs.len().min(MAX_OUTPUTS);
         for (index, label) in view.outputs.iter().take(count).enumerate() {
             let pill = self.output_pill(index, count);
@@ -564,22 +671,7 @@ impl Bar {
                 };
                 self.draw_plate(frame, pill, color)?;
             }
-            if label.width > 0
-                && label.width <= pill.width
-                && label.height <= self.height
-                && label.pixels.len() == (label.width * label.height) as usize
-            {
-                frame.blend_mask(
-                    Rectangle {
-                        x: pill.x + (pill.width - label.width) / 2,
-                        y: (self.height - label.height) / 2,
-                        width: label.width,
-                        height: label.height,
-                    },
-                    &label.pixels,
-                    LABEL,
-                )?;
-            }
+            self.draw_pill_label(frame, pill, label, LABEL)?;
         }
         Ok(())
     }
@@ -880,6 +972,7 @@ impl Bar {
                 self.capabilities.contains(StockCapabilities::AUDIO) && self.contextual.outputs > 0
             }
             Target::Action(Action::SelectOutput(_)) => self.contextual.outputs > 0,
+            Target::Action(Action::SelectDevice(_)) => self.contextual.devices > 0,
             Target::Action(Action::NowPlayingToggle | Action::Seek(_)) | Target::NowPlaying => {
                 self.contextual.now_playing
             }
@@ -957,7 +1050,8 @@ const fn normal_symbol(target: Target) -> Symbol {
             | Action::ToggleBluetooth
             | Action::NowPlayingToggle
             | Action::Seek(_)
-            | Action::SelectOutput(_),
+            | Action::SelectOutput(_)
+            | Action::SelectDevice(_),
         )
         | Target::Close
         | Target::Track
@@ -1213,6 +1307,7 @@ mod tests {
             microphone: true,
             outputs: 2,
             bluetooth: true,
+            devices: 0,
         });
         let at = |x: u32| bar.target_at(f64::from(x), 30.0, Surface::Normal);
         assert_eq!(at(1_830), Some(Target::OutputsButton));
@@ -1312,6 +1407,7 @@ mod tests {
                             scroll: 0,
                         }),
                         outputs: &outputs,
+                        devices: &[],
                         active_output: Some(1),
                         lock_progress: (surface == Surface::Normal).then_some(fraction),
                         fraction,

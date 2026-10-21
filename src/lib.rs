@@ -3,6 +3,7 @@
 
 mod art;
 mod audio;
+mod bluetooth;
 pub mod bar;
 mod connection;
 mod context;

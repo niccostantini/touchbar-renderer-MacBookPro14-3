@@ -18,6 +18,12 @@ use crate::slider::{AUTO_CLOSE_AFTER, SliderState};
 
 /// The lock key must be held this long; a shorter touch does nothing.
 pub const LOCK_HOLD: Duration = Duration::from_millis(1_800);
+/// Holding the Bluetooth key this long opens the device list instead of
+/// toggling Bluetooth.
+pub const BLUETOOTH_HOLD: Duration = Duration::from_millis(500);
+/// The device list stays open longer than the output picker: discovery
+/// and connections take a few seconds.
+const DEVICES_IDLE: Duration = Duration::from_secs(20);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InputError;
@@ -49,6 +55,10 @@ pub struct InputInterpreter {
     outputs_open: Option<Duration>,
     /// Contact holding the lock key, and when it started.
     lock_hold: Option<(ContactId, Duration)>,
+    /// Contact holding the Bluetooth key, and when it started.
+    bluetooth_hold: Option<(ContactId, Duration)>,
+    /// Last activity while the Bluetooth device picker is open.
+    devices_open: Option<Duration>,
 }
 
 impl InputInterpreter {
@@ -72,6 +82,8 @@ impl InputInterpreter {
             scrub: None,
             outputs_open: None,
             lock_hold: None,
+            bluetooth_hold: None,
+            devices_open: None,
         })
     }
 
@@ -111,24 +123,57 @@ impl InputInterpreter {
         done
     }
 
+    /// Opens the device picker once the Bluetooth key has been held long
+    /// enough; the lift of that finger then toggles nothing.
+    pub fn take_bluetooth_hold(&mut self, now: Duration) -> bool {
+        let Some((holder, since)) = self.bluetooth_hold else {
+            return false;
+        };
+        if now.saturating_sub(since) < BLUETOOTH_HOLD {
+            return false;
+        }
+        self.bluetooth_hold = None;
+        self.press_targets.remove(&holder);
+        self.slider.close();
+        self.outputs_open = None;
+        self.devices_open = Some(now);
+        true
+    }
+
+    /// A Bluetooth key hold is being timed.
+    #[must_use]
+    pub const fn bluetooth_holding(&self) -> bool {
+        self.bluetooth_hold.is_some()
+    }
+
     #[must_use]
     pub const fn outputs_open(&self) -> bool {
         self.outputs_open.is_some()
     }
 
-    fn close_outputs(&mut self) {
-        self.outputs_open = None;
+    #[must_use]
+    pub const fn devices_open(&self) -> bool {
+        self.devices_open.is_some()
     }
 
-    /// Closes the output picker after the idle timeout; returns whether it closed.
-    pub fn expire_outputs(&mut self, now: Duration) -> bool {
-        let expired = self
+    fn close_pickers(&mut self) {
+        self.outputs_open = None;
+        self.devices_open = None;
+    }
+
+    /// Closes a picker after its idle timeout; returns whether one closed.
+    pub fn expire_pickers(&mut self, now: Duration) -> bool {
+        let idle = self.gestures.is_idle();
+        let outputs = self
             .outputs_open
-            .is_some_and(|since| self.gestures.is_idle() && now.saturating_sub(since) >= AUTO_CLOSE_AFTER);
-        if expired {
-            self.outputs_open = None;
+            .is_some_and(|since| idle && now.saturating_sub(since) >= AUTO_CLOSE_AFTER);
+        let devices = self
+            .devices_open
+            .is_some_and(|since| idle && now.saturating_sub(since) >= DEVICES_IDLE);
+        if outputs || devices {
+            self.close_pickers();
         }
-        expired
+        outputs || devices
     }
 
     /// Seek preview while the title is being dragged.
@@ -145,7 +190,11 @@ impl InputInterpreter {
             self.scrub = None;
         }
         if contextual.outputs == 0 {
-            self.close_outputs();
+            self.outputs_open = None;
+        }
+        if !contextual.bluetooth {
+            self.devices_open = None;
+            self.bluetooth_hold = None;
         }
     }
 
@@ -165,6 +214,8 @@ impl InputInterpreter {
     pub fn surface(&self) -> Surface {
         if self.fn_pressed {
             Surface::Function
+        } else if self.devices_open.is_some() {
+            Surface::Devices
         } else if self.outputs_open.is_some() {
             Surface::Outputs
         } else {
@@ -191,7 +242,7 @@ impl InputInterpreter {
         };
         if frame.fn_pressed && !self.fn_pressed {
             self.slider.close();
-            self.close_outputs();
+            self.close_pickers();
         }
         self.fn_pressed = frame.fn_pressed;
         let contacts = frame
@@ -279,6 +330,16 @@ impl InputInterpreter {
                 outcome.redraw = true;
             }
         }
+        if let Some((holder, _)) = self.bluetooth_hold {
+            let still_on_key = contacts.iter().any(|contact| {
+                contact.id() == holder
+                    && self.bar.target_at(contact.x(), contact.y(), self.surface())
+                        == Some(Target::Action(Action::ToggleBluetooth))
+            });
+            if !still_on_key {
+                self.bluetooth_hold = None;
+            }
+        }
 
         let surface = self.surface();
         let pressed = contacts
@@ -320,6 +381,9 @@ impl InputInterpreter {
                 self.lock_hold = Some((contact.id(), now));
                 outcome.redraw = true;
             }
+            Target::Action(Action::ToggleBluetooth) => {
+                self.bluetooth_hold = Some((contact.id(), now));
+            }
             Target::NowPlaying => {
                 if self.bar.contextual().seekable && self.scrub.is_none() {
                     self.scrub = Some((contact.id(), None));
@@ -338,6 +402,9 @@ impl InputInterpreter {
                 self.slider.touch(now);
                 if self.outputs_open.is_some() {
                     self.outputs_open = Some(now);
+                }
+                if self.devices_open.is_some() {
+                    self.devices_open = Some(now);
                 }
             }
         }
@@ -359,8 +426,15 @@ impl InputInterpreter {
             Target::Action(action) => {
                 self.slider.touch(now);
                 if matches!(action, Action::SelectOutput(_)) {
-                    self.close_outputs();
+                    self.outputs_open = None;
                     outcome.redraw = true;
+                }
+                // The device list stays open to show the connection happen.
+                if matches!(action, Action::SelectDevice(_)) {
+                    self.devices_open = Some(now);
+                }
+                if action == Action::ToggleBluetooth {
+                    self.bluetooth_hold = None;
                 }
                 if !outcome.actions.contains(&action) {
                     outcome.actions.push(action);
@@ -368,11 +442,12 @@ impl InputInterpreter {
             }
             Target::Close => {
                 self.slider.close();
-                self.close_outputs();
+                self.close_pickers();
                 outcome.redraw = true;
             }
             Target::OutputsButton => {
                 self.slider.close();
+                self.devices_open = None;
                 self.outputs_open = Some(now);
                 outcome.redraw = true;
             }
@@ -398,8 +473,9 @@ impl InputInterpreter {
         self.pressed = None;
         self.scrub = None;
         self.lock_hold = None;
+        self.bluetooth_hold = None;
         self.slider.close();
-        self.close_outputs();
+        self.close_pickers();
     }
 }
 
@@ -531,6 +607,7 @@ mod tests {
             microphone: false,
             outputs: 0,
             bluetooth: true,
+            devices: 0,
         });
         feed(&mut input, &frame(0, false, &[(1, 900)]));
         let outcome = feed(&mut input, &frame(30, false, &[]));
@@ -554,6 +631,7 @@ mod tests {
             microphone: false,
             outputs: 2,
             bluetooth: true,
+            devices: 0,
         });
         feed(&mut input, &frame(0, false, &[(1, 1_830)]));
         feed(&mut input, &frame(30, false, &[]));
@@ -565,8 +643,8 @@ mod tests {
 
         feed(&mut input, &frame(200, false, &[(3, 1_830)]));
         feed(&mut input, &frame(230, false, &[]));
-        assert!(!input.expire_outputs(Duration::from_millis(1_000)));
-        assert!(input.expire_outputs(Duration::from_millis(4_300)));
+        assert!(!input.expire_pickers(Duration::from_millis(1_000)));
+        assert!(input.expire_pickers(Duration::from_millis(4_300)));
         assert_eq!(input.surface(), Surface::Normal);
     }
 
@@ -599,6 +677,40 @@ mod tests {
     }
 
     #[test]
+    fn bluetooth_tap_toggles_and_hold_opens_the_device_list() {
+        let mut input = interpreter();
+        input.set_contextual(Contextual {
+            now_playing: false,
+            seekable: false,
+            microphone: false,
+            outputs: 0,
+            bluetooth: true,
+            devices: 2,
+        });
+        feed(&mut input, &frame(0, false, &[(1, 600)]));
+        assert!(!input.take_bluetooth_hold(Duration::from_millis(100)));
+        let outcome = feed(&mut input, &frame(150, false, &[]));
+        assert_eq!(outcome.actions, vec![Action::ToggleBluetooth]);
+        assert!(!input.take_bluetooth_hold(Duration::from_millis(1_000)));
+
+        // Held: the list opens and the lift toggles nothing.
+        feed(&mut input, &frame(2_000, false, &[(2, 600)]));
+        assert!(input.take_bluetooth_hold(Duration::from_millis(2_500)));
+        assert_eq!(input.surface(), Surface::Devices);
+        let lift = feed(&mut input, &frame(2_600, false, &[]));
+        assert!(lift.actions.is_empty());
+
+        // Picking a device keeps the list open.
+        feed(&mut input, &frame(2_700, false, &[(3, 900)]));
+        let pick = feed(&mut input, &frame(2_730, false, &[]));
+        assert_eq!(pick.actions, vec![Action::SelectDevice(1)]);
+        assert_eq!(input.surface(), Surface::Devices);
+        assert!(!input.expire_pickers(Duration::from_millis(10_000)));
+        assert!(input.expire_pickers(Duration::from_millis(23_000)));
+        assert_eq!(input.surface(), Surface::Normal);
+    }
+
+    #[test]
     fn media_tap_does_not_reach_a_slider() {
         let mut input = interpreter();
         input.set_contextual(Contextual {
@@ -607,6 +719,7 @@ mod tests {
             microphone: false,
             outputs: 0,
             bluetooth: true,
+            devices: 0,
         });
         feed(&mut input, &frame(0, false, &[(1, 760)]));
         let outcome = feed(&mut input, &frame(30, false, &[]));

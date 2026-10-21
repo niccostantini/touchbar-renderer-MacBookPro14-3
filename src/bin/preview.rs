@@ -7,7 +7,10 @@ use std::path::Path;
 
 use t1_touchbar::framebuffer::Xrgb8888Frame;
 use t1_touchbar::stock_slice::StockCapabilities;
-use touchbar_renderer::bar::{Action, Bar, Contextual, NowPlayingView, SliderKind, Surface, Target, View};
+use touchbar_renderer::bar::{
+    Action, Bar, Contextual, DevicePill, DeviceState, NowPlayingView, SliderKind, Surface, Target,
+    View,
+};
 use touchbar_renderer::text::TextRenderer;
 
 const WIDTH: u32 = 2_170;
@@ -65,7 +68,8 @@ fn main() {
         seekable: true,
         microphone: true,
         outputs: 3,
-            bluetooth: true,
+        bluetooth: true,
+        devices: 5,
     });
     let label = text.render(
         "Vogue · Madonna",
@@ -88,6 +92,25 @@ fn main() {
                 probe.output_label_width(outputs.len()),
                 probe.now_playing_label_height(),
             )
+        })
+        .collect();
+    let devices = [
+        ("Redmi Buds 6 Active", DeviceState::Connected),
+        ("Surface Arc Mouse", DeviceState::Paired),
+        ("Bose Smart Soundbar", DeviceState::Busy),
+        ("JBL Flip 6", DeviceState::Discovered),
+        ("Galaxy Tab S9", DeviceState::Discovered),
+    ];
+    let device_pills: Vec<_> = devices
+        .iter()
+        .map(|(name, state)| DevicePill {
+            label: text.render(
+                name,
+                probe.now_playing_font_size(),
+                probe.output_label_width(devices.len()),
+                probe.now_playing_label_height(),
+            ),
+            state: *state,
         })
         .collect();
     let scenes = [
@@ -116,6 +139,7 @@ fn main() {
             pressed: Some(Target::Action(Action::LockScreen)),
             ..scene("9-tieni-premuto-per-bloccare", Surface::Normal)
         },
+        Scene { playing: None, ..scene("10-dispositivi-bluetooth", Surface::Devices) },
     ];
     for scene in scenes {
         let bar = base.with_contextual(Contextual {
@@ -124,6 +148,7 @@ fn main() {
             microphone: scene.microphone.is_some(),
             outputs: 3,
             bluetooth: true,
+            devices: 5,
         });
         let stride = WIDTH * 4;
         let mut pixels = vec![0_u8; (stride * HEIGHT) as usize];
@@ -145,6 +170,7 @@ fn main() {
                 }),
                 outputs: &output_labels,
                 active_output: Some(0),
+                devices: &device_pills,
                 lock_progress: scene.lock,
                 fraction: scene.fraction,
             },

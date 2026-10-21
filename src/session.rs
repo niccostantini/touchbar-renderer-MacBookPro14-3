@@ -17,7 +17,10 @@ use t1_touchbar_hw::wire::{
     ServiceMessage, StepDirection as WireStepDirection, SubmitFrame, TapKeys, WireInputFrame,
 };
 
-use crate::bar::{Action, Bar, Contextual, MAX_OUTPUTS, NowPlayingView, SliderKind, Surface, View};
+use crate::bar::{
+    Action, Bar, Contextual, DevicePill, DeviceState, MAX_DEVICES, MAX_OUTPUTS, NowPlayingView,
+    SliderKind, Surface, View,
+};
 use crate::connection::{
     self, HardwareConnection, MAX_PENDING_REQUESTS, NegotiatedConnection, RendererError,
     RequestIds,
@@ -55,6 +58,10 @@ const MARQUEE_HOLD: Duration = Duration::from_secs(2);
 const MARQUEE_SPEED: f64 = 32.0; // native pixels per second
 /// Rendering width for titles: wide enough that nothing is cut with "…".
 const MARQUEE_MAX_WIDTH: u32 = 6_000;
+/// A device stops showing as busy after this long, even without a change.
+const DEVICE_BUSY_TIMEOUT: Duration = Duration::from_secs(30);
+/// Shown in the Bluetooth picker until some device turns up.
+const SEARCHING_LABEL: &str = "Ricerca dispositivi…";
 
 /// Runs the renderer and reconnects forever with capped backoff.
 pub fn run_forever() {
@@ -227,6 +234,13 @@ struct Session {
     output_labels: Vec<TextMask>,
     output_names: Vec<String>,
     picker_was_open: bool,
+    /// Bluetooth picker pills, and the names and states they were made from.
+    device_pills: Vec<DevicePill>,
+    device_key: Vec<(String, DeviceState)>,
+    devices_were_open: bool,
+    /// The device a command runs for: address, start, and its (paired,
+    /// connected) state then; it shows as busy until that state changes.
+    busy_device: Option<(String, Duration, (bool, bool))>,
     /// When the current title appeared, and its last drawn marquee offset.
     marquee_since: Duration,
     marquee_offset: u32,
@@ -299,6 +313,10 @@ impl Session {
             output_labels: Vec::new(),
             output_names: Vec::new(),
             picker_was_open: false,
+            device_pills: Vec::new(),
+            device_key: Vec::new(),
+            devices_were_open: false,
+            busy_device: None,
             marquee_since: Duration::ZERO,
             marquee_offset: 0,
             marquee_dirty: false,
@@ -542,6 +560,22 @@ impl Session {
                 }
                 Ok(())
             }
+            Action::SelectDevice(index) => {
+                let Some(device) = self.snapshot.devices.get(usize::from(index)) else {
+                    return Ok(());
+                };
+                if self.busy_device.is_none() {
+                    self.context.activate_device(device);
+                    self.busy_device = Some((
+                        device.address.clone(),
+                        self.now,
+                        (device.paired, device.connected),
+                    ));
+                    self.refresh_device_pills();
+                    self.dirty = true;
+                }
+                Ok(())
+            }
             Action::Seek(permille) => {
                 if let Some(player) = self.snapshot.now_playing.as_ref() {
                     self.context.seek(player, f64::from(permille) / 1_000.0);
@@ -564,6 +598,8 @@ impl Session {
             || self.stepper.busy()
             || self.input.scrub().is_some()
             || self.input.outputs_open()
+            || self.input.devices_open()
+            || self.input.bluetooth_holding()
             || self.crossfade.is_some()
             || self.input.lock_progress(self.now).is_some()
             || self
@@ -714,6 +750,7 @@ impl Session {
             bluetooth: self.snapshot.bluetooth,
             now_playing,
             outputs: &self.output_labels,
+            devices: &self.device_pills,
             active_output: self
                 .snapshot
                 .outputs
@@ -810,12 +847,21 @@ impl Session {
             system::lock_screen();
             self.dirty = true;
         }
-        self.dirty |= self.input.expire_outputs(now);
+        self.dirty |= self.input.expire_pickers(now);
         let picker_open = self.input.outputs_open();
         if picker_open && !self.picker_was_open {
             self.context.refresh_outputs();
         }
         self.picker_was_open = picker_open;
+        self.dirty |= self.input.take_bluetooth_hold(now);
+        let devices_open = self.input.devices_open();
+        if devices_open != self.devices_were_open {
+            self.devices_were_open = devices_open;
+            self.context.set_devices_open(devices_open);
+        }
+        if devices_open {
+            self.refresh_device_pills();
+        }
         self.apply_pending_capabilities()?;
         let do_not_disturb = self.do_not_disturb.active().unwrap_or(false);
         if do_not_disturb != self.shown_do_not_disturb {
@@ -864,8 +910,10 @@ impl Session {
                 microphone: self.snapshot.microphone.is_some(),
                 outputs: u8::try_from(self.snapshot.outputs.len().min(MAX_OUTPUTS)).unwrap_or(0),
                 bluetooth: self.snapshot.bluetooth.is_some(),
+                devices: u8::try_from(self.snapshot.devices.len().min(MAX_DEVICES)).unwrap_or(0),
             };
             self.refresh_output_labels();
+            self.refresh_device_pills();
             // Both copies: the session's draws, the interpreter's hit tests.
             self.bar = self.bar.with_contextual(contextual);
             self.input.set_contextual(contextual);
@@ -907,6 +955,60 @@ impl Session {
             .map(|name| text.render(name, size, width, height))
             .collect();
         self.output_names = names;
+    }
+
+    fn refresh_device_pills(&mut self) {
+        if let Some((address, since, before)) = &self.busy_device {
+            let changed = self
+                .snapshot
+                .devices
+                .iter()
+                .find(|device| &device.address == address)
+                .is_none_or(|device| (device.paired, device.connected) != *before);
+            if changed || self.now.saturating_sub(*since) >= DEVICE_BUSY_TIMEOUT {
+                self.busy_device = None;
+            }
+        }
+        let busy = self.busy_device.as_ref().map(|(address, _, _)| address.as_str());
+        let mut key: Vec<(String, DeviceState)> = self
+            .snapshot
+            .devices
+            .iter()
+            .take(MAX_DEVICES)
+            .map(|device| {
+                let state = if busy == Some(device.address.as_str()) {
+                    DeviceState::Busy
+                } else if device.connected {
+                    DeviceState::Connected
+                } else if device.paired {
+                    DeviceState::Paired
+                } else {
+                    DeviceState::Discovered
+                };
+                (device.name.clone(), state)
+            })
+            .collect();
+        if key.is_empty() {
+            key.push((SEARCHING_LABEL.to_owned(), DeviceState::Placeholder));
+        }
+        if key == self.device_key {
+            return;
+        }
+        let Some(text) = self.text.as_ref() else {
+            return;
+        };
+        let width = self.bar.output_label_width(key.len());
+        let height = self.bar.now_playing_label_height();
+        let size = self.bar.now_playing_font_size();
+        self.device_pills = key
+            .iter()
+            .map(|(name, state)| DevicePill {
+                label: text.render(name, size, width, height),
+                state: *state,
+            })
+            .collect();
+        self.device_key = key;
+        self.dirty = true;
     }
 
     fn refresh_label(&mut self) {
