@@ -65,6 +65,7 @@ fn main() {
         seekable: true,
         microphone: true,
         outputs: 3,
+            bluetooth: true,
     });
     let label = text.render(
         "Vogue · Madonna",
@@ -122,6 +123,7 @@ fn main() {
             seekable: true,
             microphone: scene.microphone.is_some(),
             outputs: 3,
+            bluetooth: true,
         });
         let stride = WIDTH * 4;
         let mut pixels = vec![0_u8; (stride * HEIGHT) as usize];
@@ -134,6 +136,7 @@ fn main() {
                 muted: scene.muted,
                 do_not_disturb: scene.do_not_disturb,
                 microphone: scene.microphone,
+                bluetooth: Some(!scene.muted),
                 now_playing: scene.playing.map(|playing| NowPlayingView {
                     label: if scene.long_title { &long_label } else { &label },
                     playing,

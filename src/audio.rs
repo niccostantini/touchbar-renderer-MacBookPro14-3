@@ -133,6 +133,40 @@ pub fn toggle_microphone_mute() {
     wpctl(&["set-mute", SOURCE, "toggle"]);
 }
 
+/// `Some(on)` for the Bluetooth adapter (rfkill soft state), `None` without one.
+#[must_use]
+pub fn bluetooth() -> Option<bool> {
+    let entries = fs::read_dir("/sys/class/rfkill").ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if fs::read_to_string(path.join("type")).ok()?.trim() != "bluetooth" {
+            continue;
+        }
+        let soft = fs::read_to_string(path.join("soft")).ok()?;
+        let hard = fs::read_to_string(path.join("hard")).ok()?;
+        return Some(soft.trim() == "0" && hard.trim() == "0");
+    }
+    None
+}
+
+/// Turns Bluetooth on or off through GNOME (the same switch as its menu).
+pub fn set_bluetooth(on: bool) {
+    let _ = Command::new("busctl")
+        .args([
+            "--user",
+            "set-property",
+            "org.gnome.SettingsDaemon.Rfkill",
+            "/org/gnome/SettingsDaemon/Rfkill",
+            "org.gnome.SettingsDaemon.Rfkill",
+            "BluetoothAirplaneMode",
+            "b",
+            if on { "false" } else { "true" },
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
 /// Plays GNOME's volume feedback sound without waiting for it.
 pub fn tick() {
     let _ = Command::new("pw-play")

@@ -15,6 +15,7 @@ soluzioni) è in **[docs/PROCESSO.md](docs/PROCESSO.md)**.
 - **Esc** sempre a sinistra; con **Fn** premuto: Esc, F1–F12.
 - **Ritaglio** apre lo strumento screenshot di GNOME (tasto Stamp).
 - **Lucchetto** blocca lo schermo; **luna** = Non disturbare di GNOME.
+- **Bluetooth** acceso/spento (blu quando è acceso), come l'interruttore di GNOME.
 - **Microfono**: compare solo mentre un'app registra; rosso e barrato se muto.
 - **Brano in riproduzione** (MPRIS): tocca per pausa, trascina per spostarti.
 - **Sole / tastiera / volume** aprono uno slider a tutta barra: tocca, oppure

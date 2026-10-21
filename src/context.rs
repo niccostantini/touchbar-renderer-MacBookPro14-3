@@ -41,6 +41,8 @@ pub struct Snapshot {
     pub screen_off: bool,
     /// Audio outputs for the picker.
     pub outputs: Vec<Output>,
+    /// `Some(on)` when the Mac has Bluetooth.
+    pub bluetooth: Option<bool>,
 }
 
 impl Snapshot {
@@ -55,6 +57,7 @@ impl Snapshot {
             && self.microphone == other.microphone
             && self.screen_off == other.screen_off
             && self.outputs == other.outputs
+            && self.bluetooth == other.bluetooth
     }
 }
 
@@ -185,6 +188,10 @@ impl Context {
         self.command(AUDIO, audio::toggle_output_mute);
     }
 
+    pub fn set_bluetooth(&self, on: bool) {
+        self.command(MICROPHONE, move || audio::set_bluetooth(on));
+    }
+
     pub fn toggle_microphone(&self) {
         self.command(MICROPHONE, audio::toggle_microphone_mute);
     }
@@ -249,6 +256,7 @@ fn poll_forever(shared: &Mutex<(u64, Snapshot)>, requests: &Receiver<Parts>, fas
         }
         if now >= next_microphone {
             snapshot.microphone = audio::microphone();
+            snapshot.bluetooth = audio::bluetooth();
             next_microphone = now + MICROPHONE_INTERVAL;
         }
         if now >= next_outputs {

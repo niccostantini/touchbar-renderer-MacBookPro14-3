@@ -530,13 +530,14 @@ mod tests {
             seekable: true,
             microphone: false,
             outputs: 0,
+            bluetooth: true,
         });
         feed(&mut input, &frame(0, false, &[(1, 900)]));
         let outcome = feed(&mut input, &frame(30, false, &[]));
         assert_eq!(outcome.actions, vec![Action::NowPlayingToggle]);
 
-        feed(&mut input, &frame(100, false, &[(2, 700)]));
-        let moving = feed(&mut input, &frame(110, false, &[(2, 1_007)]));
+        feed(&mut input, &frame(100, false, &[(2, 830)]));
+        let moving = feed(&mut input, &frame(110, false, &[(2, 1_066)]));
         assert!(moving.actions.is_empty(), "seek waits for the release");
         assert!((input.scrub().unwrap() - 0.5).abs() < 1e-9);
         let release = feed(&mut input, &frame(120, false, &[]));
@@ -552,6 +553,7 @@ mod tests {
             seekable: false,
             microphone: false,
             outputs: 2,
+            bluetooth: true,
         });
         feed(&mut input, &frame(0, false, &[(1, 1_830)]));
         feed(&mut input, &frame(30, false, &[]));
@@ -604,8 +606,9 @@ mod tests {
             seekable: true,
             microphone: false,
             outputs: 0,
+            bluetooth: true,
         });
-        feed(&mut input, &frame(0, false, &[(1, 650)]));
+        feed(&mut input, &frame(0, false, &[(1, 760)]));
         let outcome = feed(&mut input, &frame(30, false, &[]));
         assert_eq!(outcome.actions, vec![Action::MediaPrevious]);
         assert_eq!(input.surface(), Surface::Normal);

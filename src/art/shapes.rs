@@ -105,6 +105,7 @@ pub(crate) enum Icon {
     Microphone,
     MicrophoneOff,
     Speaker,
+    Bluetooth,
 }
 
 /// Draws `icon` centred in `bounds`, `size` pixels square.
@@ -157,6 +158,20 @@ fn icon_contains(icon: Icon, u: f64, v: f64) -> bool {
             let woofer = distance(0.5, 0.62);
             let tweeter = distance(0.5, 0.28) <= 0.075;
             (outer && !inner) || (0.10..=0.18).contains(&woofer) || tweeter
+        }
+        Icon::Bluetooth => {
+            // The Bluetooth rune: a spine and two folded arrows.
+            let segment = |(ax, ay): (f64, f64), (bx, by): (f64, f64)| {
+                let (dx, dy) = (bx - ax, by - ay);
+                let t = (((u - ax) * dx + (v - ay) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
+                (u - (ax + t * dx)).hypot(v - (ay + t * dy)) <= 0.055
+            };
+            let (top, bottom) = ((0.5, 0.06), (0.5, 0.94));
+            segment(top, bottom)
+                || segment(top, (0.76, 0.29))
+                || segment((0.76, 0.29), (0.25, 0.71))
+                || segment(bottom, (0.76, 0.71))
+                || segment((0.76, 0.71), (0.25, 0.29))
         }
         Icon::MicrophoneOff => {
             // Slash from top-left to bottom-right with a background gap.
@@ -212,6 +227,7 @@ mod tests {
             Icon::Microphone,
             Icon::MicrophoneOff,
             Icon::Speaker,
+            Icon::Bluetooth,
         ] {
             for size in [1, 7, 30, 64] {
                 let extent = f64::from(size);

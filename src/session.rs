@@ -515,6 +515,14 @@ impl Session {
                 self.do_not_disturb.toggle();
                 Ok(())
             }
+            Action::ToggleBluetooth => {
+                if let Some(on) = self.snapshot.bluetooth.as_mut() {
+                    *on = !*on;
+                    self.context.set_bluetooth(*on);
+                    self.dirty = true;
+                }
+                Ok(())
+            }
             Action::ToggleMicrophone => {
                 if let Some(microphone) = self.snapshot.microphone.as_mut() {
                     microphone.muted = !microphone.muted;
@@ -703,6 +711,7 @@ impl Session {
             muted: self.muted,
             do_not_disturb: self.shown_do_not_disturb,
             microphone: self.snapshot.microphone.map(|microphone| microphone.muted),
+            bluetooth: self.snapshot.bluetooth,
             now_playing,
             outputs: &self.output_labels,
             active_output: self
@@ -854,6 +863,7 @@ impl Session {
                     .is_some_and(NowPlaying::seekable),
                 microphone: self.snapshot.microphone.is_some(),
                 outputs: u8::try_from(self.snapshot.outputs.len().min(MAX_OUTPUTS)).unwrap_or(0),
+                bluetooth: self.snapshot.bluetooth.is_some(),
             };
             self.refresh_output_labels();
             // Both copies: the session's draws, the interpreter's hit tests.

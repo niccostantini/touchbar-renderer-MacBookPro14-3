@@ -62,6 +62,11 @@ const MICROPHONE_MUTED_PLATE: Rgb = Rgb {
     green: 42,
     blue: 42,
 };
+const BLUETOOTH_ON_PLATE: Rgb = Rgb {
+    red: 37,
+    green: 99,
+    blue: 235,
+};
 const MICROPHONE_MUTED_PRESSED: Rgb = Rgb {
     red: 204,
     green: 64,
@@ -80,7 +85,8 @@ struct Span {
 const SCREENSHOT_BUTTON: Span = Span { x: 194, width: 110 };
 const LOCK_BUTTON: Span = Span { x: 312, width: 110 };
 const DO_NOT_DISTURB_BUTTON: Span = Span { x: 430, width: 110 };
-const MICROPHONE_BUTTON: Span = Span { x: 548, width: 110 };
+const BLUETOOTH_BUTTON: Span = Span { x: 548, width: 110 };
+const MICROPHONE_BUTTON: Span = Span { x: 666, width: 110 };
 const CUSTOM_ICON: u32 = 30;
 
 // Now playing: title line and a thin progress bar, shown while a player has
@@ -158,6 +164,7 @@ pub enum Action {
     LockScreen,
     ToggleDoNotDisturb,
     ToggleMicrophone,
+    ToggleBluetooth,
     /// Play/pause the player shown in the now-playing area.
     NowPlayingToggle,
     /// Seek the shown track, in thousandths of its length.
@@ -213,6 +220,8 @@ pub struct View<'a> {
     pub do_not_disturb: bool,
     /// `Some(muted)` while an application records from a microphone.
     pub microphone: Option<bool>,
+    /// `Some(on)` when the Mac has Bluetooth.
+    pub bluetooth: Option<bool>,
     pub now_playing: Option<NowPlayingView<'a>>,
     /// Pre-rendered output names for the picker, and the active one.
     pub outputs: &'a [TextMask],
@@ -231,6 +240,8 @@ pub struct Contextual {
     pub microphone: bool,
     /// Number of audio outputs listed in the picker.
     pub outputs: u8,
+    /// The Mac has a Bluetooth adapter.
+    pub bluetooth: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -276,6 +287,7 @@ impl Bar {
                     seekable: false,
                     microphone: false,
                     outputs: 0,
+                    bluetooth: false,
                 },
             })
         }
@@ -308,6 +320,8 @@ impl Bar {
     fn now_playing_span(self) -> Span {
         let last = if self.contextual.microphone {
             MICROPHONE_BUTTON
+        } else if self.contextual.bluetooth {
+            BLUETOOTH_BUTTON
         } else {
             DO_NOT_DISTURB_BUTTON
         };
@@ -583,12 +597,14 @@ impl Bar {
                 Target::Action(Action::ToggleMute) => view.muted,
                 Target::Action(Action::ToggleDoNotDisturb) => view.do_not_disturb,
                 Target::Action(Action::ToggleMicrophone) => view.microphone == Some(true),
+                Target::Action(Action::ToggleBluetooth) => view.bluetooth == Some(true),
                 _ => false,
             };
             let pressed = view.pressed == Some(target);
             let color = match (target, toggled, pressed) {
                 (Target::Action(Action::ToggleMicrophone), true, false) => MICROPHONE_MUTED_PLATE,
                 (Target::Action(Action::ToggleMicrophone), true, true) => MICROPHONE_MUTED_PRESSED,
+                (Target::Action(Action::ToggleBluetooth), true, false) => BLUETOOTH_ON_PLATE,
                 (_, true, false) => ACTIVE_PLATE,
                 (_, _, true) => PRESSED_PLATE,
                 (_, false, false) => PLATE,
@@ -834,11 +850,12 @@ impl Bar {
         }
     }
 
-    fn normal_items(self) -> [(Target, Span); 9] {
+    fn normal_items(self) -> [(Target, Span); 10] {
         [
             (Target::Action(Action::Screenshot), SCREENSHOT_BUTTON),
             (Target::Action(Action::LockScreen), LOCK_BUTTON),
             (Target::Action(Action::ToggleDoNotDisturb), DO_NOT_DISTURB_BUTTON),
+            (Target::Action(Action::ToggleBluetooth), BLUETOOTH_BUTTON),
             (Target::Action(Action::ToggleMicrophone), MICROPHONE_BUTTON),
             (Target::SliderButton(SliderKind::Display), DISPLAY_BUTTON),
             (Target::SliderButton(SliderKind::Keyboard), KEYBOARD_BUTTON),
@@ -858,6 +875,7 @@ impl Bar {
                 Action::MediaPrevious | Action::MediaPlayPause | Action::MediaNext,
             ) => self.capabilities.contains(StockCapabilities::MEDIA),
             Target::Action(Action::ToggleMicrophone) => self.contextual.microphone,
+            Target::Action(Action::ToggleBluetooth) => self.contextual.bluetooth,
             Target::OutputsButton => {
                 self.capabilities.contains(StockCapabilities::AUDIO) && self.contextual.outputs > 0
             }
@@ -936,6 +954,7 @@ const fn normal_symbol(target: Target) -> Symbol {
             | Action::LockScreen
             | Action::ToggleDoNotDisturb
             | Action::ToggleMicrophone
+            | Action::ToggleBluetooth
             | Action::NowPlayingToggle
             | Action::Seek(_)
             | Action::SelectOutput(_),
@@ -990,6 +1009,7 @@ const fn icon_color(target: Target) -> Rgb {
         Target::Action(Action::LockScreen) => YELLOW,
         Target::Action(Action::ToggleDoNotDisturb) => VIOLET,
         Target::Action(Action::ToggleMicrophone) => CYAN,
+        Target::Action(Action::ToggleBluetooth) => rgb(150),
         Target::SliderButton(SliderKind::Display) => DISPLAY_GRADIENT[2],
         Target::SliderButton(SliderKind::Keyboard) => KEYBOARD_GRADIENT[2],
         Target::Action(Action::MediaPrevious | Action::MediaPlayPause | Action::MediaNext) => {
@@ -1075,6 +1095,7 @@ const fn custom_icon(target: Target) -> Option<Icon> {
         Target::Action(Action::LockScreen) => Some(Icon::Padlock),
         Target::Action(Action::ToggleDoNotDisturb) => Some(Icon::Moon),
         Target::Action(Action::ToggleMicrophone) => Some(Icon::Microphone),
+        Target::Action(Action::ToggleBluetooth) => Some(Icon::Bluetooth),
         Target::OutputsButton => Some(Icon::Speaker),
         _ => None,
     }
@@ -1191,6 +1212,7 @@ mod tests {
             seekable: true,
             microphone: true,
             outputs: 2,
+            bluetooth: true,
         });
         let at = |x: u32| bar.target_at(f64::from(x), 30.0, Surface::Normal);
         assert_eq!(at(1_830), Some(Target::OutputsButton));
@@ -1199,13 +1221,14 @@ mod tests {
         assert_eq!(pick(400), Some(Target::Action(Action::SelectOutput(0))));
         assert_eq!(pick(900), Some(Target::Action(Action::SelectOutput(1))));
         assert_eq!(pick(2_000), None);
-        assert_eq!(at(600), Some(Target::Action(Action::ToggleMicrophone)));
-        // Block 722..1410: previous and next at the ends, title between.
-        assert_eq!(at(760), Some(Target::Action(Action::MediaPrevious)));
-        assert_eq!(at(1_000), Some(Target::NowPlaying));
+        assert_eq!(at(600), Some(Target::Action(Action::ToggleBluetooth)));
+        assert_eq!(at(700), Some(Target::Action(Action::ToggleMicrophone)));
+        // Block 840..1410: previous and next at the ends, title between.
+        assert_eq!(at(880), Some(Target::Action(Action::MediaPrevious)));
+        assert_eq!(at(1_100), Some(Target::NowPlaying));
         assert_eq!(at(1_380), Some(Target::Action(Action::MediaNext)));
         assert_eq!(at(1_440), None, "padding before the brightness group");
-        assert!((bar.now_playing_fraction(1_066.0) - 0.5).abs() < 1e-9);
+        assert!((bar.now_playing_fraction(1_125.0) - 0.5).abs() < 1e-9);
     }
 
     #[test]
@@ -1281,6 +1304,7 @@ mod tests {
                         muted: true,
                         do_not_disturb: true,
                         microphone: Some(true),
+                        bluetooth: Some(true),
                         now_playing: Some(NowPlayingView {
                             label: &label,
                             playing: false,
