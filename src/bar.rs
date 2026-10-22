@@ -117,13 +117,14 @@ const LOCK_BAR_HEIGHT: u32 = 16;
 const MARQUEE_GAP: u32 = 90;
 
 // Normal strip, right-aligned like the macOS Control Strip: brightness group,
-// audio group, then forward delete at the far right edge.
+// audio group, then forward delete. Delete stops short of the edge: the
+// Touch ID power key sits right after it, and a brush suspends the Mac.
 const DISPLAY_BUTTON: Span = Span { x: 1_344, width: 130 };
 const KEYBOARD_BUTTON: Span = Span { x: 1_480, width: 130 };
 const OUTPUTS_BUTTON: Span = Span { x: 1_638, width: 130 };
 const MUTE_BUTTON: Span = Span { x: 1_774, width: 130 };
 const VOLUME_BUTTON: Span = Span { x: 1_910, width: 130 };
-const DELETE_BUTTON: Span = Span { x: 2_062, width: 108 };
+const DELETE_BUTTON: Span = Span { x: 2_054, width: 92 };
 
 // Expanded slider.
 const CLOSE_BUTTON: Span = Span { x: 190, width: 130 };
@@ -1308,7 +1309,8 @@ mod tests {
         assert_eq!(at(1_830), Some(Target::Action(Action::ToggleMute)));
         assert_eq!(at(2_039), Some(Target::SliderButton(SliderKind::Volume)));
         assert_eq!(at(2_050), None, "gap before forward delete");
-        assert_eq!(at(2_169), Some(Target::Action(Action::ForwardDelete)));
+        assert_eq!(at(2_100), Some(Target::Action(Action::ForwardDelete)));
+        assert_eq!(at(2_160), None, "dead strip before the power key");
         // Gaps between plates are inert.
         assert_eq!(at(1_476), None);
 
