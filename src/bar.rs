@@ -33,6 +33,7 @@ const ORANGE: Rgb = Rgb { red: 255, green: 138, blue: 61 };
 const YELLOW: Rgb = Rgb { red: 255, green: 210, blue: 63 };
 const VIOLET: Rgb = Rgb { red: 167, green: 123, blue: 255 };
 const CYAN: Rgb = Rgb { red: 88, green: 214, blue: 255 };
+const CORAL: Rgb = Rgb { red: 255, green: 79, blue: 109 };
 const fn hex(value: u32) -> Rgb {
     #[allow(clippy::cast_possible_truncation)]
     Rgb {
@@ -116,12 +117,13 @@ const LOCK_BAR_HEIGHT: u32 = 16;
 const MARQUEE_GAP: u32 = 90;
 
 // Normal strip, right-aligned like the macOS Control Strip: brightness group,
-// media group, audio group.
-const DISPLAY_BUTTON: Span = Span { x: 1_474, width: 130 };
-const KEYBOARD_BUTTON: Span = Span { x: 1_610, width: 130 };
-const OUTPUTS_BUTTON: Span = Span { x: 1_768, width: 130 };
-const MUTE_BUTTON: Span = Span { x: 1_904, width: 130 };
-const VOLUME_BUTTON: Span = Span { x: 2_040, width: 130 };
+// audio group, then forward delete at the far right edge.
+const DISPLAY_BUTTON: Span = Span { x: 1_344, width: 130 };
+const KEYBOARD_BUTTON: Span = Span { x: 1_480, width: 130 };
+const OUTPUTS_BUTTON: Span = Span { x: 1_638, width: 130 };
+const MUTE_BUTTON: Span = Span { x: 1_774, width: 130 };
+const VOLUME_BUTTON: Span = Span { x: 1_910, width: 130 };
+const DELETE_BUTTON: Span = Span { x: 2_062, width: 108 };
 
 // Expanded slider.
 const CLOSE_BUTTON: Span = Span { x: 190, width: 130 };
@@ -176,6 +178,8 @@ pub enum Action {
     ToggleDoNotDisturb,
     ToggleMicrophone,
     ToggleBluetooth,
+    /// Forward delete ("Canc").
+    ForwardDelete,
     /// Play/pause the player shown in the now-playing area.
     NowPlayingToggle,
     /// Seek the shown track, in thousandths of its length.
@@ -942,7 +946,7 @@ impl Bar {
         }
     }
 
-    fn normal_items(self) -> [(Target, Span); 10] {
+    fn normal_items(self) -> [(Target, Span); 11] {
         [
             (Target::Action(Action::Screenshot), SCREENSHOT_BUTTON),
             (Target::Action(Action::LockScreen), LOCK_BUTTON),
@@ -954,6 +958,7 @@ impl Bar {
             (Target::OutputsButton, OUTPUTS_BUTTON),
             (Target::Action(Action::ToggleMute), MUTE_BUTTON),
             (Target::SliderButton(SliderKind::Volume), VOLUME_BUTTON),
+            (Target::Action(Action::ForwardDelete), DELETE_BUTTON),
         ]
     }
 
@@ -981,7 +986,8 @@ impl Bar {
                 | Action::Function(_)
                 | Action::Screenshot
                 | Action::LockScreen
-                | Action::ToggleDoNotDisturb,
+                | Action::ToggleDoNotDisturb
+                | Action::ForwardDelete,
             )
             | Target::Close
             | Target::Track => true,
@@ -1048,6 +1054,7 @@ const fn normal_symbol(target: Target) -> Symbol {
             | Action::ToggleDoNotDisturb
             | Action::ToggleMicrophone
             | Action::ToggleBluetooth
+            | Action::ForwardDelete
             | Action::NowPlayingToggle
             | Action::Seek(_)
             | Action::SelectOutput(_)
@@ -1112,6 +1119,7 @@ const fn icon_color(target: Target) -> Rgb {
         Target::Action(Action::ToggleMute) => CYAN,
         Target::OutputsButton => ORANGE,
         Target::SliderButton(SliderKind::Volume) => VOLUME_GRADIENT[1],
+        Target::Action(Action::ForwardDelete) => CORAL,
         _ => LABEL,
     }
 }
@@ -1191,6 +1199,7 @@ const fn custom_icon(target: Target) -> Option<Icon> {
         Target::Action(Action::ToggleMicrophone) => Some(Icon::Microphone),
         Target::Action(Action::ToggleBluetooth) => Some(Icon::Bluetooth),
         Target::OutputsButton => Some(Icon::Speaker),
+        Target::Action(Action::ForwardDelete) => Some(Icon::ForwardDelete),
         _ => None,
     }
 }
@@ -1292,14 +1301,16 @@ mod tests {
         assert_eq!(at(600), None);
         assert_eq!(at(800), None);
         assert_eq!(at(1_100), None, "now playing is absent");
-        assert_eq!(at(1_500), Some(Target::SliderButton(SliderKind::Display)));
-        assert_eq!(at(1_650), Some(Target::SliderButton(SliderKind::Keyboard)));
+        assert_eq!(at(1_400), Some(Target::SliderButton(SliderKind::Display)));
+        assert_eq!(at(1_530), Some(Target::SliderButton(SliderKind::Keyboard)));
         // The outputs button needs at least one listed output.
-        assert_eq!(at(1_830), None);
-        assert_eq!(at(1_960), Some(Target::Action(Action::ToggleMute)));
-        assert_eq!(at(2_169), Some(Target::SliderButton(SliderKind::Volume)));
+        assert_eq!(at(1_700), None);
+        assert_eq!(at(1_830), Some(Target::Action(Action::ToggleMute)));
+        assert_eq!(at(2_039), Some(Target::SliderButton(SliderKind::Volume)));
+        assert_eq!(at(2_050), None, "gap before forward delete");
+        assert_eq!(at(2_169), Some(Target::Action(Action::ForwardDelete)));
         // Gaps between plates are inert.
-        assert_eq!(at(1_606), None);
+        assert_eq!(at(1_476), None);
 
         let bar = bar.with_contextual(Contextual {
             now_playing: true,
@@ -1310,7 +1321,7 @@ mod tests {
             devices: 0,
         });
         let at = |x: u32| bar.target_at(f64::from(x), 30.0, Surface::Normal);
-        assert_eq!(at(1_830), Some(Target::OutputsButton));
+        assert_eq!(at(1_700), Some(Target::OutputsButton));
         let pick = |x: u32| bar.target_at(f64::from(x), 30.0, Surface::Outputs);
         assert_eq!(pick(250), Some(Target::Close));
         assert_eq!(pick(400), Some(Target::Action(Action::SelectOutput(0))));
@@ -1318,19 +1329,19 @@ mod tests {
         assert_eq!(pick(2_000), None);
         assert_eq!(at(600), Some(Target::Action(Action::ToggleBluetooth)));
         assert_eq!(at(700), Some(Target::Action(Action::ToggleMicrophone)));
-        // Block 840..1410: previous and next at the ends, title between.
+        // Block 840..1280: previous and next at the ends, title between.
         assert_eq!(at(880), Some(Target::Action(Action::MediaPrevious)));
         assert_eq!(at(1_100), Some(Target::NowPlaying));
-        assert_eq!(at(1_380), Some(Target::Action(Action::MediaNext)));
-        assert_eq!(at(1_440), None, "padding before the brightness group");
-        assert!((bar.now_playing_fraction(1_125.0) - 0.5).abs() < 1e-9);
+        assert_eq!(at(1_250), Some(Target::Action(Action::MediaNext)));
+        assert_eq!(at(1_310), None, "padding before the brightness group");
+        assert!((bar.now_playing_fraction(1_060.0) - 0.5).abs() < 1e-9);
     }
 
     #[test]
     fn unavailable_controls_are_not_hit() {
         let bar = Bar::new(NATIVE_WIDTH, NATIVE_HEIGHT, StockCapabilities::default()).unwrap();
         assert_eq!(bar.target_at(1_240.0, 30.0, Surface::Normal), None);
-        assert_eq!(bar.target_at(2_100.0, 30.0, Surface::Normal), None);
+        assert_eq!(bar.target_at(2_000.0, 30.0, Surface::Normal), None);
         assert_eq!(bar.target_at(1_600.0, 30.0, Surface::Normal), None);
     }
 

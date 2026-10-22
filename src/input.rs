@@ -550,7 +550,7 @@ mod tests {
     #[test]
     fn touching_volume_opens_slider_and_tap_keeps_it_open() {
         let mut input = interpreter();
-        feed(&mut input, &frame(0, false, &[(1, 2_090)]));
+        feed(&mut input, &frame(0, false, &[(1, 1_970)]));
         assert_eq!(input.surface(), Surface::Slider(SliderKind::Volume));
         let lift = feed(&mut input, &frame(40, false, &[]));
         assert!(lift.changes.is_empty(), "lifting must not set the level");
@@ -561,8 +561,8 @@ mod tests {
     #[test]
     fn press_and_slide_adjusts_relative_to_the_current_level() {
         let mut input = interpreter();
-        feed(&mut input, &frame(0, false, &[(1, 2_090)]));
-        let outcome = feed(&mut input, &frame(10, false, &[(1, 1_345)]));
+        feed(&mut input, &frame(0, false, &[(1, 1_970)]));
+        let outcome = feed(&mut input, &frame(10, false, &[(1, 1_225)]));
         let (kind, value) = *outcome.changes.last().unwrap();
         assert_eq!(kind, SliderKind::Volume);
         // 745 px left on a 1490 px track: from 0.5 down to 0.0.
@@ -572,7 +572,7 @@ mod tests {
     #[test]
     fn track_touch_jumps_and_close_button_closes() {
         let mut input = interpreter();
-        feed(&mut input, &frame(0, false, &[(1, 1_500)]));
+        feed(&mut input, &frame(0, false, &[(1, 1_400)]));
         feed(&mut input, &frame(10, false, &[]));
         assert_eq!(input.surface(), Surface::Slider(SliderKind::Display));
         let outcome = feed(&mut input, &frame(20, false, &[(2, 1_960)]));
@@ -587,7 +587,7 @@ mod tests {
     #[test]
     fn fn_shows_function_row_and_closes_slider() {
         let mut input = interpreter();
-        feed(&mut input, &frame(0, false, &[(1, 2_090)]));
+        feed(&mut input, &frame(0, false, &[(1, 1_970)]));
         feed(&mut input, &frame(10, false, &[]));
         feed(&mut input, &frame(20, true, &[]));
         assert_eq!(input.surface(), Surface::Function);
@@ -614,7 +614,7 @@ mod tests {
         assert_eq!(outcome.actions, vec![Action::NowPlayingToggle]);
 
         feed(&mut input, &frame(100, false, &[(2, 830)]));
-        let moving = feed(&mut input, &frame(110, false, &[(2, 1_066)]));
+        let moving = feed(&mut input, &frame(110, false, &[(2, 1_001)]));
         assert!(moving.actions.is_empty(), "seek waits for the release");
         assert!((input.scrub().unwrap() - 0.5).abs() < 1e-9);
         let release = feed(&mut input, &frame(120, false, &[]));
@@ -633,7 +633,7 @@ mod tests {
             bluetooth: true,
             devices: 0,
         });
-        feed(&mut input, &frame(0, false, &[(1, 1_830)]));
+        feed(&mut input, &frame(0, false, &[(1, 1_700)]));
         feed(&mut input, &frame(30, false, &[]));
         assert_eq!(input.surface(), Surface::Outputs);
         feed(&mut input, &frame(60, false, &[(2, 900)]));
@@ -641,7 +641,7 @@ mod tests {
         assert_eq!(outcome.actions, vec![Action::SelectOutput(1)]);
         assert_eq!(input.surface(), Surface::Normal);
 
-        feed(&mut input, &frame(200, false, &[(3, 1_830)]));
+        feed(&mut input, &frame(200, false, &[(3, 1_700)]));
         feed(&mut input, &frame(230, false, &[]));
         assert!(!input.expire_pickers(Duration::from_millis(1_000)));
         assert!(input.expire_pickers(Duration::from_millis(4_300)));

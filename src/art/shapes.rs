@@ -106,6 +106,8 @@ pub(crate) enum Icon {
     MicrophoneOff,
     Speaker,
     Bluetooth,
+    /// macOS ⌦: a right-pointing key outline with a cross inside.
+    ForwardDelete,
 }
 
 /// Draws `icon` centred in `bounds`, `size` pixels square.
@@ -161,17 +163,22 @@ fn icon_contains(icon: Icon, u: f64, v: f64) -> bool {
         }
         Icon::Bluetooth => {
             // The Bluetooth rune: a spine and two folded arrows.
-            let segment = |(ax, ay): (f64, f64), (bx, by): (f64, f64)| {
-                let (dx, dy) = (bx - ax, by - ay);
-                let t = (((u - ax) * dx + (v - ay) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
-                (u - (ax + t * dx)).hypot(v - (ay + t * dy)) <= 0.055
-            };
+            let segment = |a, b| segment(u, v, a, b, 0.055);
             let (top, bottom) = ((0.5, 0.06), (0.5, 0.94));
             segment(top, bottom)
                 || segment(top, (0.76, 0.29))
                 || segment((0.76, 0.29), (0.25, 0.71))
                 || segment(bottom, (0.76, 0.71))
                 || segment((0.76, 0.71), (0.25, 0.29))
+        }
+        Icon::ForwardDelete => {
+            let key = |inset: f64| {
+                u >= 0.04 + inset
+                    && (v - 0.5).abs() <= (0.32 - inset).min(0.96 - u - inset * std::f64::consts::SQRT_2)
+            };
+            let cross = segment(u, v, (0.25, 0.37), (0.51, 0.63), 0.05)
+                || segment(u, v, (0.25, 0.63), (0.51, 0.37), 0.05);
+            (key(0.0) && !key(0.075)) || cross
         }
         Icon::MicrophoneOff => {
             // Slash from top-left to bottom-right with a background gap.
@@ -182,6 +189,13 @@ fn icon_contains(icon: Icon, u: f64, v: f64) -> bool {
             slash || (microphone(u, v) && !gap)
         }
     }
+}
+
+/// Whether (u, v) lies within `half_width` of the segment a-b.
+fn segment(u: f64, v: f64, (ax, ay): (f64, f64), (bx, by): (f64, f64), half_width: f64) -> bool {
+    let (dx, dy) = (bx - ax, by - ay);
+    let t = (((u - ax) * dx + (v - ay) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
+    (u - (ax + t * dx)).hypot(v - (ay + t * dy)) <= half_width
 }
 
 fn microphone(u: f64, v: f64) -> bool {
@@ -228,6 +242,7 @@ mod tests {
             Icon::MicrophoneOff,
             Icon::Speaker,
             Icon::Bluetooth,
+            Icon::ForwardDelete,
         ] {
             for size in [1, 7, 30, 64] {
                 let extent = f64::from(size);

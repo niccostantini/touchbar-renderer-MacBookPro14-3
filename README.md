@@ -22,6 +22,7 @@ soluzioni) è in **[docs/PROCESSO.md](docs/PROCESSO.md)**.
 - **Sole / tastiera / volume** aprono uno slider a tutta barra: tocca, oppure
   tocca e trascina subito. Chiusura con ✕, Fn o dopo 4 s.
 - **Altoparlante**: sceglie l'uscita audio senza aprire le Impostazioni.
+- **Canc** (⌦) tutto a destra: cancella in avanti, come il tasto Canc.
 - A schermo bloccato o spento la barra è nera e non risponde.
 
 ### Tutte le schermate
