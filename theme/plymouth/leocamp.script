@@ -1,5 +1,10 @@
 # Leo Camp boot splash. Pieces are pre-rendered by build.py; geometry is in
 # the scene's native 1920x1200 pixels and scaled to the screen.
+#
+# The layout is recomputed whenever the screen size changes: Plymouth starts
+# on the firmware framebuffer (simpledrm, scale 1, 2880x1800) and moves to the
+# Radeon a few seconds later (scale 2, 1440x900 logical). Laid out once, the
+# scene came out doubled and cropped to the top-left quarter after the switch.
 
 FORMULAS = 20;
 NAMES = 20;
@@ -7,23 +12,9 @@ NAMES = 20;
 Window.SetBackgroundTopColor(0.071, 0.051, 0.086);
 Window.SetBackgroundBottomColor(0.071, 0.051, 0.086);
 
-screen_w = Window.GetWidth();
-screen_h = Window.GetHeight();
-
 scene = Image("background.png");
-k = Math.Max(screen_w / scene.GetWidth(), screen_h / scene.GetHeight());
-
-fun place_x(native_x) { return screen_w / 2 + (native_x - 960) * k; }
-fun place_y(native_y) { return screen_h / 2 + (native_y - 600) * k; }
-
-fun scaled(image) {
-  return image.Scale(Math.Max(1, image.GetWidth() * k), Math.Max(1, image.GetHeight() * k));
-}
-
-scene_sprite = Sprite(scaled(scene));
-scene_sprite.SetX(place_x(0));
-scene_sprite.SetY(place_y(0));
-scene_sprite.SetZ(-10);
+bar_image = Image("bar.png");
+fill_image = Image("fill.png");
 
 # ---- Random greeting: "<formula> <name><punctuation>" ----
 formula = Math.Int(Math.Random() * FORMULAS) + 1;
@@ -32,34 +23,75 @@ name = Math.Int(Math.Random() * NAMES) + 1;
 if (name > NAMES) name = NAMES;
 if (Math.Random() < 0.5) name_file = "n" + name + "s.png";
 else name_file = "n" + name + ".png";
+prefix_image = Image("f" + formula + ".png");
+who_image = Image(name_file);
+suffix_image = Image("p" + formula + ".png");
 
-prefix = scaled(Image("f" + formula + ".png"));
-who = scaled(Image(name_file));
-suffix = scaled(Image("p" + formula + ".png"));
-
-space = 18 * k;
-total = prefix.GetWidth() + space + who.GetWidth() + suffix.GetWidth();
-text_x = screen_w / 2 - total / 2;
-text_y = place_y(855);
-
-prefix_sprite = Sprite(prefix);
-prefix_sprite.SetPosition(text_x, text_y, 1);
-who_sprite = Sprite(who);
-who_sprite.SetPosition(text_x + prefix.GetWidth() + space, text_y, 1);
-suffix_sprite = Sprite(suffix);
-suffix_sprite.SetPosition(text_x + prefix.GetWidth() + space + who.GetWidth(), text_y, 1);
-
-# ---- Progress bar ----
-bar = scaled(Image("bar.png"));
-bar_sprite = Sprite(bar);
-bar_sprite.SetPosition(place_x(700), place_y(1030), 1);
-
-fill_image = Image("fill.png");
+scene_sprite = Sprite();
+scene_sprite.SetZ(-10);
+prefix_sprite = Sprite();
+who_sprite = Sprite();
+suffix_sprite = Sprite();
+bar_sprite = Sprite();
 fill_sprite = Sprite();
-fill_sprite.SetPosition(place_x(706), place_y(1036), 2);
 
-fun progress_callback(duration, progress) {
-  width = Math.Max(1, fill_image.GetWidth() * k * progress);
-  fill_sprite.SetImage(fill_image.Scale(width, fill_image.GetHeight() * k));
+progress = 0;
+screen_w = 0;
+screen_h = 0;
+k = 1;
+
+fun place_x(native_x) { return screen_w / 2 + (native_x - 960) * k; }
+fun place_y(native_y) { return screen_h / 2 + (native_y - 600) * k; }
+
+fun scaled(image) {
+  return image.Scale(Math.Max(1, image.GetWidth() * k), Math.Max(1, image.GetHeight() * k));
+}
+
+fun draw_fill() {
+  if (progress > 0) {
+    width = Math.Max(1, fill_image.GetWidth() * k * progress);
+    fill_sprite.SetImage(fill_image.Scale(width, fill_image.GetHeight() * k));
+  }
+}
+
+fun layout() {
+  global.screen_w = Window.GetWidth();
+  global.screen_h = Window.GetHeight();
+  global.k = Math.Max(screen_w / scene.GetWidth(), screen_h / scene.GetHeight());
+
+  scene_sprite.SetImage(scaled(scene));
+  scene_sprite.SetX(place_x(0));
+  scene_sprite.SetY(place_y(0));
+
+  prefix = scaled(prefix_image);
+  who = scaled(who_image);
+  suffix = scaled(suffix_image);
+  space = 18 * k;
+  total = prefix.GetWidth() + space + who.GetWidth() + suffix.GetWidth();
+  text_x = screen_w / 2 - total / 2;
+  text_y = place_y(855);
+  prefix_sprite.SetImage(prefix);
+  prefix_sprite.SetPosition(text_x, text_y, 1);
+  who_sprite.SetImage(who);
+  who_sprite.SetPosition(text_x + prefix.GetWidth() + space, text_y, 1);
+  suffix_sprite.SetImage(suffix);
+  suffix_sprite.SetPosition(text_x + prefix.GetWidth() + space + who.GetWidth(), text_y, 1);
+
+  bar_sprite.SetImage(scaled(bar_image));
+  bar_sprite.SetPosition(place_x(700), place_y(1030), 1);
+  fill_sprite.SetPosition(place_x(706), place_y(1036), 2);
+  draw_fill();
+}
+
+layout();
+
+fun refresh_callback() {
+  if (Window.GetWidth() != screen_w || Window.GetHeight() != screen_h) layout();
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+
+fun progress_callback(duration, value) {
+  global.progress = value;
+  draw_fill();
 }
 Plymouth.SetBootProgressFunction(progress_callback);
