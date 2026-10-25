@@ -219,6 +219,9 @@ struct Session {
     stepper: DisplayStepper,
     last_level_poll: Duration,
     keyboard: Throttle,
+    /// Keyboard backlight percent before the screen locked or went dark;
+    /// it is switched off meanwhile and restored afterwards.
+    keyboard_before_lock: Option<u8>,
     volume_writer: Throttle,
     volume_set_at: Option<Duration>,
     do_not_disturb: DoNotDisturb,
@@ -300,6 +303,7 @@ impl Session {
             stepper: DisplayStepper::default(),
             last_level_poll: Duration::ZERO,
             keyboard: Throttle::default(),
+            keyboard_before_lock: None,
             volume_writer: Throttle::default(),
             volume_set_at: None,
             do_not_disturb: DoNotDisturb::start(),
@@ -887,6 +891,33 @@ impl Session {
         self.submit_if_ready(connection)
     }
 
+    /// Turns the keyboard backlight off while the screen is locked or off,
+    /// and back to its previous level afterwards, unless it was changed
+    /// in between (then the new level stays).
+    fn dim_keyboard_while_locked(&mut self) {
+        if !self.bar.slider_available(SliderKind::Keyboard) {
+            return;
+        }
+        let Some(current) = self
+            .keyboard_level
+            .as_ref()
+            .and_then(LevelSource::fraction)
+            .map(to_percent)
+        else {
+            return;
+        };
+        if self.screen_off {
+            if current > 0 {
+                self.keyboard_before_lock = Some(current);
+                self.keyboard.set(0);
+            }
+        } else if let Some(previous) = self.keyboard_before_lock.take()
+            && current == 0
+        {
+            self.keyboard.set(previous);
+        }
+    }
+
     /// Adopts a new contextual snapshot and keeps the progress bar moving.
     fn advance_context(&mut self) {
         if let Some((generation, snapshot)) = self.context.changed_since(self.context_generation) {
@@ -897,6 +928,7 @@ impl Session {
                 if self.screen_off {
                     self.input.cancel_touches();
                 }
+                self.dim_keyboard_while_locked();
             }
             self.take_audio();
             self.set_capabilities(desktop_capabilities(&self.snapshot));

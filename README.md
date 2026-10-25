@@ -23,7 +23,8 @@ soluzioni) è in **[docs/PROCESSO.md](docs/PROCESSO.md)**.
   tocca e trascina subito. Chiusura con ✕, Fn o dopo 4 s.
 - **Altoparlante**: sceglie l'uscita audio senza aprire le Impostazioni.
 - **Canc** (⌦) tutto a destra: cancella in avanti, come il tasto Canc.
-- A schermo bloccato o spento la barra è nera e non risponde.
+- A schermo bloccato o spento la barra è nera e non risponde, e la
+  retroilluminazione della tastiera si spegne; allo sblocco torna com'era.
 
 ### Tutte le schermate
 
