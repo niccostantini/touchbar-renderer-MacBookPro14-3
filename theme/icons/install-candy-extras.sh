@@ -16,6 +16,8 @@ install -m644 "$HERE/leocamp-vscode.svg" "$CANDY/leocamp-vscode.svg"
 install -m644 "$HERE/leocamp-onlyoffice.svg" "$CANDY/leocamp-onlyoffice.svg"
 install -m644 "$HERE/leocamp-mailspring.svg" "$CANDY/leocamp-mailspring.svg"
 install -m644 "$HERE/leocamp-webstorm.svg" "$CANDY/leocamp-webstorm.svg"
+install -m644 "$HERE/leocamp-controcoro.svg" "$CANDY/leocamp-controcoro.svg"
+install -m644 "$HERE/leocamp-leo.svg" "$CANDY/leocamp-leo.svg"
 gtk-update-icon-cache -q -f "$DATA/icons/candy-icons" 2>/dev/null || true
 
 mkdir -p "$DATA/applications"
@@ -47,8 +49,13 @@ done
 # WhatsApp Web is a Brave web app: its launcher already lives in the home.
 # Brave may rewrite it when the app is reinstalled; rerun this script then.
 for desktop in "$DATA"/applications/brave-*.desktop; do
-	grep -q '^Name=WhatsApp' "$desktop" 2>/dev/null || continue
-	sed -i 's|^Icon=.*|Icon=leocamp-whatsapp|' "$desktop"
+	case "$(grep -m1 '^Name=' "$desktop" 2>/dev/null)" in
+	Name=WhatsApp*) icon=leocamp-whatsapp ;;
+	"Name=Admin ControCoro") icon=leocamp-controcoro ;;
+	"Name=Brave Leo AI") icon=leocamp-leo ;;
+	*) continue ;;
+	esac
+	sed -i "s|^Icon=.*|Icon=$icon|" "$desktop"
 done
 update-desktop-database -q "$DATA/applications" 2>/dev/null || true
 echo "Icone Terminale e App Center installate in Candy."

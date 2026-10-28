@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48"><defs><linearGradient id="g" x1="2" y1="46" x2="46" y2="2" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#6a2be8"/><stop offset=".5" stop-color="#f2369b"/><stop offset="1" stop-color="#ff7b2e"/></linearGradient></defs>
+<g fill="none" stroke="url(#g)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
+<path d="M21 5 Q23 17 37 21 Q23 25 21 37 Q19 25 5 21 Q19 17 21 5 Z"/>
+<path d="M37 31 Q37.8 35.2 42 36 Q37.8 36.8 37 41 Q36.2 36.8 32 36 Q36.2 35.2 37 31 Z"/>
+</g></svg>
