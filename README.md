@@ -14,6 +14,8 @@ soluzioni) è in **[docs/PROCESSO.md](docs/PROCESSO.md)**.
 
 - **Esc** sempre a sinistra; con **Fn** premuto: Esc, F1–F12.
 - **Ritaglio** apre lo strumento screenshot di GNOME (tasto Stamp).
+- **Ritaglio con la T**: selezioni un'area e il testo che contiene (OCR,
+  italiano e inglese) finisce negli appunti. Usa `~/ubuntu-text-capture`.
 - **Lucchetto** blocca lo schermo; **luna** = Non disturbare di GNOME.
 - **Bluetooth** acceso/spento (blu quando è acceso), come l'interruttore di GNOME;
   tenuto premuto mezzo secondo apre l'elenco dei dispositivi.

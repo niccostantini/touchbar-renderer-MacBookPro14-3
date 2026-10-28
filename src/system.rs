@@ -39,6 +39,22 @@ pub fn lock_screen() {
     });
 }
 
+/// Starts the OCR text capture (`~/ubuntu-text-capture`). `systemd-run`
+/// gives it the user manager's environment, which has the Wayland display
+/// this service may have started without.
+pub fn text_capture() {
+    thread::spawn(|| {
+        let script = format!(
+            "{}/ubuntu-text-capture/text_capture.sh",
+            std::env::var("HOME").unwrap_or_default()
+        );
+        let _ = Command::new("systemd-run")
+            .args(["--user", "--collect", "--quiet", &script])
+            .stderr(Stdio::null())
+            .status();
+    });
+}
+
 fn user_name() -> String {
     std::env::var("USER").unwrap_or_default()
 }

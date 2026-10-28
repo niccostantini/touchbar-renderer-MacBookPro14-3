@@ -100,6 +100,8 @@ pub(crate) fn draw_knob(
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Icon {
     Crop,
+    /// The crop glyph with a serif T in front: text capture (OCR).
+    CropText,
     Padlock,
     Moon,
     Microphone,
@@ -134,15 +136,10 @@ pub(crate) fn draw_icon(
 fn icon_contains(icon: Icon, u: f64, v: f64) -> bool {
     let distance = |cx: f64, cy: f64| (u - cx).hypot(v - cy);
     match icon {
-        Icon::Crop => {
-            // Two interlocking crop corners, as in the usual crop/screenshot glyph.
-            let half = 0.055;
-            let bar = |a: f64, b: f64, fixed: f64, along: f64, across: f64| {
-                (a - half..=b + half).contains(&along) && (across - fixed).abs() <= half
-            };
-            let first = bar(0.06, 0.74, 0.28, v, u) || bar(0.28, 0.94, 0.74, u, v);
-            let second = bar(0.06, 0.74, 0.28, u, v) || bar(0.28, 0.94, 0.74, v, u);
-            first || second
+        Icon::Crop => crop(u, v),
+        Icon::CropText => {
+            // The crop lines stop short of the T's corner so it reads cleanly.
+            (crop(u, v) && (u < 0.34 || v < 0.34)) || serif_t(u, v, 0.0)
         }
         Icon::Padlock => {
             let body = rounded_rect(u, v, (0.16, 0.44, 0.84, 0.96), 0.08);
@@ -191,6 +188,29 @@ fn icon_contains(icon: Icon, u: f64, v: f64) -> bool {
     }
 }
 
+/// Two interlocking crop corners, as in the usual crop/screenshot glyph.
+fn crop(u: f64, v: f64) -> bool {
+    let half = 0.055;
+    let bar = |a: f64, b: f64, fixed: f64, along: f64, across: f64| {
+        (a - half..=b + half).contains(&along) && (across - fixed).abs() <= half
+    };
+    let first = bar(0.06, 0.74, 0.28, v, u) || bar(0.28, 0.94, 0.74, u, v);
+    let second = bar(0.06, 0.74, 0.28, u, v) || bar(0.28, 0.94, 0.74, v, u);
+    first || second
+}
+
+/// A serif capital T in the lower right, grown by `grow` on every side.
+fn serif_t(u: f64, v: f64, grow: f64) -> bool {
+    let rect = |left: f64, top: f64, right: f64, bottom: f64| {
+        (left - grow..=right + grow).contains(&u) && (top - grow..=bottom + grow).contains(&v)
+    };
+    rect(0.40, 0.40, 0.98, 0.49)       // crossbar
+        || rect(0.40, 0.40, 0.46, 0.60) // left serif
+        || rect(0.92, 0.40, 0.98, 0.60) // right serif
+        || rect(0.645, 0.40, 0.735, 0.95) // stem
+        || rect(0.55, 0.89, 0.83, 0.97) // foot
+}
+
 /// Whether (u, v) lies within `half_width` of the segment a-b.
 fn segment(u: f64, v: f64, (ax, ay): (f64, f64), (bx, by): (f64, f64), half_width: f64) -> bool {
     let (dx, dy) = (bx - ax, by - ay);
@@ -236,6 +256,7 @@ mod tests {
     fn every_icon_and_degenerate_shape_rasterizes() {
         for icon in [
             Icon::Crop,
+            Icon::CropText,
             Icon::Padlock,
             Icon::Moon,
             Icon::Microphone,

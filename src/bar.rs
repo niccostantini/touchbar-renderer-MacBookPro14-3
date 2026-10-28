@@ -33,6 +33,7 @@ const ORANGE: Rgb = Rgb { red: 255, green: 138, blue: 61 };
 const YELLOW: Rgb = Rgb { red: 255, green: 210, blue: 63 };
 const VIOLET: Rgb = Rgb { red: 167, green: 123, blue: 255 };
 const CYAN: Rgb = Rgb { red: 88, green: 214, blue: 255 };
+const AMBER: Rgb = Rgb { red: 255, green: 176, blue: 46 };
 const CORAL: Rgb = Rgb { red: 255, green: 79, blue: 109 };
 const fn hex(value: u32) -> Rgb {
     #[allow(clippy::cast_possible_truncation)]
@@ -93,10 +94,11 @@ struct Span {
 // Custom buttons, left-aligned in the space after Escape. The microphone
 // button appears only while an application records.
 const SCREENSHOT_BUTTON: Span = Span { x: 194, width: 110 };
-const LOCK_BUTTON: Span = Span { x: 312, width: 110 };
-const DO_NOT_DISTURB_BUTTON: Span = Span { x: 430, width: 110 };
-const BLUETOOTH_BUTTON: Span = Span { x: 548, width: 110 };
-const MICROPHONE_BUTTON: Span = Span { x: 666, width: 110 };
+const TEXT_CAPTURE_BUTTON: Span = Span { x: 312, width: 110 };
+const LOCK_BUTTON: Span = Span { x: 430, width: 110 };
+const DO_NOT_DISTURB_BUTTON: Span = Span { x: 548, width: 110 };
+const BLUETOOTH_BUTTON: Span = Span { x: 666, width: 110 };
+const MICROPHONE_BUTTON: Span = Span { x: 784, width: 110 };
 const CUSTOM_ICON: u32 = 30;
 
 // Now playing: title line and a thin progress bar, shown while a player has
@@ -175,6 +177,8 @@ pub enum Action {
     MediaPlayPause,
     MediaNext,
     Screenshot,
+    /// Select an area and copy its text (OCR) to the clipboard.
+    TextCapture,
     LockScreen,
     ToggleDoNotDisturb,
     ToggleMicrophone,
@@ -947,9 +951,10 @@ impl Bar {
         }
     }
 
-    fn normal_items(self) -> [(Target, Span); 11] {
+    fn normal_items(self) -> [(Target, Span); 12] {
         [
             (Target::Action(Action::Screenshot), SCREENSHOT_BUTTON),
+            (Target::Action(Action::TextCapture), TEXT_CAPTURE_BUTTON),
             (Target::Action(Action::LockScreen), LOCK_BUTTON),
             (Target::Action(Action::ToggleDoNotDisturb), DO_NOT_DISTURB_BUTTON),
             (Target::Action(Action::ToggleBluetooth), BLUETOOTH_BUTTON),
@@ -986,6 +991,7 @@ impl Bar {
                 Action::Escape
                 | Action::Function(_)
                 | Action::Screenshot
+                | Action::TextCapture
                 | Action::LockScreen
                 | Action::ToggleDoNotDisturb
                 | Action::ForwardDelete,
@@ -1051,6 +1057,7 @@ const fn normal_symbol(target: Target) -> Symbol {
             Action::Escape
             | Action::Function(_)
             | Action::Screenshot
+            | Action::TextCapture
             | Action::LockScreen
             | Action::ToggleDoNotDisturb
             | Action::ToggleMicrophone
@@ -1108,6 +1115,7 @@ fn marquee_window(label: &TextMask, width: u32, scroll: u32, period: u32) -> Vec
 const fn icon_color(target: Target) -> Rgb {
     match target {
         Target::Action(Action::Screenshot) => ORANGE,
+        Target::Action(Action::TextCapture) => AMBER,
         Target::Action(Action::LockScreen) => YELLOW,
         Target::Action(Action::ToggleDoNotDisturb) => VIOLET,
         Target::Action(Action::ToggleMicrophone) => CYAN,
@@ -1195,6 +1203,7 @@ fn draw_gradient_fill(
 const fn custom_icon(target: Target) -> Option<Icon> {
     match target {
         Target::Action(Action::Screenshot) => Some(Icon::Crop),
+        Target::Action(Action::TextCapture) => Some(Icon::CropText),
         Target::Action(Action::LockScreen) => Some(Icon::Padlock),
         Target::Action(Action::ToggleDoNotDisturb) => Some(Icon::Moon),
         Target::Action(Action::ToggleMicrophone) => Some(Icon::Microphone),
@@ -1296,11 +1305,12 @@ mod tests {
         let at = |x: u32| bar.target_at(f64::from(x), 30.0, Surface::Normal);
         assert_eq!(at(10), Some(Target::Action(Action::Escape)));
         assert_eq!(at(250), Some(Target::Action(Action::Screenshot)));
-        assert_eq!(at(360), Some(Target::Action(Action::LockScreen)));
-        assert_eq!(at(480), Some(Target::Action(Action::ToggleDoNotDisturb)));
+        assert_eq!(at(360), Some(Target::Action(Action::TextCapture)));
+        assert_eq!(at(480), Some(Target::Action(Action::LockScreen)));
+        assert_eq!(at(600), Some(Target::Action(Action::ToggleDoNotDisturb)));
         // Contextual elements are inert until present.
-        assert_eq!(at(600), None);
-        assert_eq!(at(800), None);
+        assert_eq!(at(720), None);
+        assert_eq!(at(840), None);
         assert_eq!(at(1_100), None, "now playing is absent");
         assert_eq!(at(1_400), Some(Target::SliderButton(SliderKind::Display)));
         assert_eq!(at(1_530), Some(Target::SliderButton(SliderKind::Keyboard)));
@@ -1329,14 +1339,14 @@ mod tests {
         assert_eq!(pick(400), Some(Target::Action(Action::SelectOutput(0))));
         assert_eq!(pick(900), Some(Target::Action(Action::SelectOutput(1))));
         assert_eq!(pick(2_000), None);
-        assert_eq!(at(600), Some(Target::Action(Action::ToggleBluetooth)));
-        assert_eq!(at(700), Some(Target::Action(Action::ToggleMicrophone)));
-        // Block 840..1280: previous and next at the ends, title between.
-        assert_eq!(at(880), Some(Target::Action(Action::MediaPrevious)));
+        assert_eq!(at(720), Some(Target::Action(Action::ToggleBluetooth)));
+        assert_eq!(at(840), Some(Target::Action(Action::ToggleMicrophone)));
+        // Block 958..1280: previous and next at the ends, title between.
+        assert_eq!(at(1_000), Some(Target::Action(Action::MediaPrevious)));
         assert_eq!(at(1_100), Some(Target::NowPlaying));
         assert_eq!(at(1_250), Some(Target::Action(Action::MediaNext)));
         assert_eq!(at(1_310), None, "padding before the brightness group");
-        assert!((bar.now_playing_fraction(1_060.0) - 0.5).abs() < 1e-9);
+        assert!((bar.now_playing_fraction(1_119.0) - 0.5).abs() < 1e-9);
     }
 
     #[test]

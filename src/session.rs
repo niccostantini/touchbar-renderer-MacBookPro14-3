@@ -529,6 +529,10 @@ impl Session {
                 Ok(())
             }
             Action::Screenshot => self.send_key(KeyCode::Print, connection),
+            Action::TextCapture => {
+                system::text_capture();
+                Ok(())
+            }
             Action::ForwardDelete => self.send_key(KeyCode::Delete, connection),
             Action::LockScreen => {
                 system::lock_screen();

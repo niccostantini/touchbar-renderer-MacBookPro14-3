@@ -609,12 +609,12 @@ mod tests {
             bluetooth: true,
             devices: 0,
         });
-        feed(&mut input, &frame(0, false, &[(1, 900)]));
+        feed(&mut input, &frame(0, false, &[(1, 1_000)]));
         let outcome = feed(&mut input, &frame(30, false, &[]));
         assert_eq!(outcome.actions, vec![Action::NowPlayingToggle]);
 
-        feed(&mut input, &frame(100, false, &[(2, 830)]));
-        let moving = feed(&mut input, &frame(110, false, &[(2, 1_001)]));
+        feed(&mut input, &frame(100, false, &[(2, 1_000)]));
+        let moving = feed(&mut input, &frame(110, false, &[(2, 1_060)]));
         assert!(moving.actions.is_empty(), "seek waits for the release");
         assert!((input.scrub().unwrap() - 0.5).abs() < 1e-9);
         let release = feed(&mut input, &frame(120, false, &[]));
@@ -652,25 +652,25 @@ mod tests {
     fn lock_needs_a_full_hold_on_the_key() {
         let mut input = interpreter();
         // A tap does nothing.
-        feed(&mut input, &frame(0, false, &[(1, 360)]));
+        feed(&mut input, &frame(0, false, &[(1, 480)]));
         let outcome = feed(&mut input, &frame(40, false, &[]));
         assert!(outcome.actions.is_empty());
         assert_eq!(input.lock_progress(Duration::from_millis(50)), None);
 
         // Lifting early cancels.
-        feed(&mut input, &frame(100, false, &[(2, 360)]));
+        feed(&mut input, &frame(100, false, &[(2, 480)]));
         assert!(input.lock_progress(Duration::from_millis(1_000)).unwrap() > 0.4);
         feed(&mut input, &frame(1_000, false, &[]));
         assert!(!input.take_lock(Duration::from_millis(3_000)));
 
         // Sliding off the key cancels.
-        feed(&mut input, &frame(3_000, false, &[(3, 360)]));
+        feed(&mut input, &frame(3_000, false, &[(3, 480)]));
         feed(&mut input, &frame(3_100, false, &[(3, 900)]));
         assert_eq!(input.lock_progress(Duration::from_millis(3_200)), None);
         feed(&mut input, &frame(3_200, false, &[]));
 
         // A full hold locks once.
-        feed(&mut input, &frame(5_000, false, &[(4, 360)]));
+        feed(&mut input, &frame(5_000, false, &[(4, 480)]));
         assert!(!input.take_lock(Duration::from_millis(6_700)));
         assert!(input.take_lock(Duration::from_millis(6_800)));
         assert!(!input.take_lock(Duration::from_millis(6_900)));
@@ -687,14 +687,14 @@ mod tests {
             bluetooth: true,
             devices: 2,
         });
-        feed(&mut input, &frame(0, false, &[(1, 600)]));
+        feed(&mut input, &frame(0, false, &[(1, 720)]));
         assert!(!input.take_bluetooth_hold(Duration::from_millis(100)));
         let outcome = feed(&mut input, &frame(150, false, &[]));
         assert_eq!(outcome.actions, vec![Action::ToggleBluetooth]);
         assert!(!input.take_bluetooth_hold(Duration::from_millis(1_000)));
 
         // Held: the list opens and the lift toggles nothing.
-        feed(&mut input, &frame(2_000, false, &[(2, 600)]));
+        feed(&mut input, &frame(2_000, false, &[(2, 720)]));
         assert!(input.take_bluetooth_hold(Duration::from_millis(2_500)));
         assert_eq!(input.surface(), Surface::Devices);
         let lift = feed(&mut input, &frame(2_600, false, &[]));
@@ -721,7 +721,7 @@ mod tests {
             bluetooth: true,
             devices: 0,
         });
-        feed(&mut input, &frame(0, false, &[(1, 760)]));
+        feed(&mut input, &frame(0, false, &[(1, 880)]));
         let outcome = feed(&mut input, &frame(30, false, &[]));
         assert_eq!(outcome.actions, vec![Action::MediaPrevious]);
         assert_eq!(input.surface(), Surface::Normal);
