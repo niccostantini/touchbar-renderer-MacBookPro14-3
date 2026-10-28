@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48"><defs><linearGradient id="g" x1="2" y1="46" x2="46" y2="2" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#b3201a"/><stop offset=".5" stop-color="#e2452b"/><stop offset="1" stop-color="#ff8a3d"/></linearGradient></defs>
 <g fill="none" stroke="url(#g)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
-<path d="M8 16 Q11 9.5 17 10.5 Q22 11.8 19.5 17 Q17 21 11.5 21.5 Q6 23 7.5 28.5 Q9 33 15 32 Q20 30.5 20.5 24.5"/>
-<path d="M27 32 Q34 22 41 7.5"/>
-<path d="M38 13 L34.5 31.5 Q33 40 27 41.5 Q22.5 42.5 21 38.5"/>
+<path d="M9 13 Q14 8 19 11 Q22 15 18 18.5 Q14.5 20.5 11 19.5"/>
+<path d="M12 22.5 Q8 25 9.5 29 Q12 32.5 17 31.5 Q21 30.5 24 28"/>
+<path d="M24 31 L42 7"/>
+<path d="M42 7 Q41 26 35 34 Q30.5 40 24.5 41.5"/>
 </g></svg>
