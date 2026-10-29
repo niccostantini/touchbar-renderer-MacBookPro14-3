@@ -32,6 +32,7 @@ use crate::mpris::{NowPlaying, Playback};
 use crate::slider::{DisplayStepper, Throttle};
 use crate::system::{self, DoNotDisturb};
 use crate::text::{TextMask, TextRenderer};
+use crate::touch_id_view;
 use crate::transition::{Crossfade, FN_FADE, LAYOUT_FADE};
 
 const BUFFER_ID: u32 = 1;
@@ -202,6 +203,8 @@ struct Session {
     touch_id: TouchIdOverlay,
     overlay_state: Option<OverlayState>,
     overlay_visual_state: Option<OverlayState>,
+    /// Rendered Touch ID label, keyed by its text.
+    touch_id_label: Option<(&'static str, TextMask)>,
     overlay: Fade,
     enrollment_progress: Option<u8>,
     enrollment: Fade,
@@ -286,6 +289,7 @@ impl Session {
             touch_id: TouchIdOverlay::new(dimensions.width(), dimensions.height()),
             overlay_state: None,
             overlay_visual_state: None,
+            touch_id_label: None,
             overlay: Fade::default(),
             enrollment_progress: None,
             enrollment: Fade::default(),
@@ -617,6 +621,12 @@ impl Session {
                 .is_some_and(|(_, label)| self.bar.now_playing_scrolls(label.width))
             || self.overlay.value != self.overlay.target
             || self.enrollment.value != self.enrollment.target
+            || self.touch_id_spinning()
+    }
+
+    fn touch_id_spinning(&self) -> bool {
+        self.overlay_visual_state
+            .is_some_and(|state| touch_id_view::handles(state) && touch_id_view::spinning(state))
     }
 
     fn send_key(&mut self, key: KeyCode, connection: &HardwareConnection) -> Result<(), RendererError> {
@@ -800,6 +810,28 @@ impl Session {
                     .map_err(|_| RendererError::Frame)?;
             }
         }
+        if let Some(state) = self.overlay_visual_state.filter(|state| touch_id_view::handles(*state)) {
+            let label = touch_id_view::label(state);
+            if self.touch_id_label.as_ref().is_none_or(|(text, _)| *text != label) {
+                self.touch_id_label = self.text.as_ref().map(|text| {
+                    (
+                        label,
+                        text.render(
+                            label,
+                            touch_id_view::text_size(height),
+                            touch_id_view::text_width(height),
+                            height,
+                        ),
+                    )
+                });
+            }
+            let text = self
+                .touch_id_label
+                .as_ref()
+                .map(|(_, mask)| (mask.pixels.as_slice(), mask.width, mask.height));
+            return touch_id_view::draw(&mut frame, state, text, self.now.as_secs_f64(), opacity)
+                .map_err(|_| RendererError::Frame);
+        }
         self.touch_id
             .render_with_progress(
                 &mut frame,
@@ -849,7 +881,7 @@ impl Session {
         self.dirty |= self.input.slider_mut().expire(now);
         self.advance_context();
         self.advance_marquee(now);
-        if self.input.lock_progress(now).is_some() {
+        if self.input.lock_progress(now).is_some() || self.touch_id_spinning() {
             self.dirty = true;
         }
         if self.input.take_lock(now) {

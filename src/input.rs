@@ -15,6 +15,7 @@ use t1_touchbar_hw::wire::{self, InputContact, WireInputFrame};
 
 use crate::bar::{Action, Bar, Contextual, SliderKind, Surface, Target};
 use crate::slider::{AUTO_CLOSE_AFTER, SliderState};
+use crate::touch_id_view;
 
 /// The lock key must be held this long; a shorter touch does nothing.
 pub const LOCK_HOLD: Duration = Duration::from_millis(1_800);
@@ -40,6 +41,7 @@ pub struct InputOutcome {
 pub struct InputInterpreter {
     bar: Bar,
     touch_id: TouchIdOverlay,
+    dimensions: DisplayDimensions,
     settings: GestureSettings,
     gestures: GestureEngine,
     fn_pressed: bool,
@@ -72,6 +74,7 @@ impl InputInterpreter {
         Ok(Self {
             bar,
             touch_id: TouchIdOverlay::new(dimensions.width(), dimensions.height()),
+            dimensions,
             settings,
             gestures: GestureEngine::new(settings),
             fn_pressed: false,
@@ -257,9 +260,16 @@ impl InputInterpreter {
             .map_err(|_| InputError)?;
 
         for gesture in gestures {
-            if self
-                .touch_id
-                .cancellation_for_gesture(gesture, overlay_state, self.fn_pressed)
+            let leo_camp_cancel = matches!(gesture, Gesture::Press(contact) if touch_id_view::cancels(
+                self.dimensions.width(),
+                self.dimensions.height(),
+                overlay_state,
+                contact.x(),
+            ));
+            if leo_camp_cancel
+                || self
+                    .touch_id
+                    .cancellation_for_gesture(gesture, overlay_state, self.fn_pressed)
             {
                 outcome.cancel_touch_id = true;
                 continue;

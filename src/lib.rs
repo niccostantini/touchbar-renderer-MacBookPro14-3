@@ -15,4 +15,5 @@ mod screen;
 mod slider;
 mod system;
 pub mod text;
+pub mod touch_id_view;
 mod transition;

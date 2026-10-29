@@ -11,7 +11,10 @@ use touchbar_renderer::bar::{
     Action, Bar, Contextual, DevicePill, DeviceState, NowPlayingView, SliderKind, Surface, Target,
     View,
 };
+use t1_touchbar::framebuffer::{Rectangle, Rgb};
+use t1_touchbar::overlay_state::OverlayState;
 use touchbar_renderer::text::TextRenderer;
+use touchbar_renderer::touch_id_view;
 
 const WIDTH: u32 = 2_170;
 const HEIGHT: u32 = 60;
@@ -177,6 +180,61 @@ fn main() {
         )
         .expect("render");
         let path = output.join(format!("{}.png", scene.name));
+        fs::write(&path, png(WIDTH, HEIGHT, &pixels)).expect("write png");
+        println!("{}", path.display());
+    }
+    touch_id_previews(&base, output);
+}
+
+/// The Touch ID prompt over the normal strip, one file per state.
+fn touch_id_previews(bar: &Bar, output: &Path) {
+    let text = TextRenderer::load().expect("font");
+    for (name, state) in [
+        ("touch-id-wait", OverlayState::Authenticate),
+        ("touch-id-retry", OverlayState::Retry),
+        ("touch-id-success", OverlayState::Success),
+    ] {
+        let stride = WIDTH * 4;
+        let mut pixels = vec![0_u8; (stride * HEIGHT) as usize];
+        let mut frame = Xrgb8888Frame::new(WIDTH, HEIGHT, stride, &mut pixels).expect("frame");
+        bar.render(&mut frame, &View {
+            surface: Surface::Normal,
+            pressed: None,
+            muted: false,
+            do_not_disturb: false,
+            microphone: None,
+            bluetooth: None,
+            now_playing: None,
+            outputs: &[],
+            active_output: None,
+            devices: &[],
+            lock_progress: None,
+            fraction: 0.0,
+        })
+        .expect("render");
+        let left = bar.escape_right();
+        frame
+            .blend_rectangle(
+                Rectangle { x: left, y: 0, width: WIDTH - left, height: HEIGHT },
+                Rgb { red: 0, green: 0, blue: 0 },
+                u8::MAX,
+            )
+            .expect("dim");
+        let label = text.render(
+            touch_id_view::label(state),
+            touch_id_view::text_size(HEIGHT),
+            touch_id_view::text_width(HEIGHT),
+            HEIGHT,
+        );
+        touch_id_view::draw(
+            &mut frame,
+            state,
+            Some((&label.pixels, label.width, label.height)),
+            0.2,
+            u8::MAX,
+        )
+        .expect("touch id");
+        let path = output.join(format!("{name}.png"));
         fs::write(&path, png(WIDTH, HEIGHT, &pixels)).expect("write png");
         println!("{}", path.display());
     }
