@@ -739,12 +739,28 @@ impl Session {
     }
 
     fn render(&mut self, partial: bool) -> Result<(), RendererError> {
-        if self.screen_off {
-            self.frame.as_mut_slice().fill(0);
-            return Ok(());
-        }
         let width = self.dimensions.width();
         let height = self.dimensions.height();
+        if self.screen_off {
+            self.frame.as_mut_slice().fill(0);
+            // Only the Touch ID prompt shows on the locked screen.
+            let opacity = u8::try_from(self.overlay.value).unwrap_or(u8::MAX);
+            if opacity > 0 {
+                let mut frame =
+                    Xrgb8888Frame::new(width, height, self.stride, self.frame.as_mut_slice())
+                        .map_err(|_| RendererError::Frame)?;
+                return Self::draw_touch_id(
+                    &mut frame,
+                    self.overlay_visual_state,
+                    &mut self.touch_id_label,
+                    self.text.as_ref(),
+                    self.now,
+                    opacity,
+                )
+                .map(|_| ());
+            }
+            return Ok(());
+        }
         let surface = self.shown_surface();
         let mut frame = Xrgb8888Frame::new(width, height, self.stride, self.frame.as_mut_slice())
             .map_err(|_| RendererError::Frame)?;
@@ -810,27 +826,15 @@ impl Session {
                     .map_err(|_| RendererError::Frame)?;
             }
         }
-        if let Some(state) = self.overlay_visual_state.filter(|state| touch_id_view::handles(*state)) {
-            let label = touch_id_view::label(state);
-            if self.touch_id_label.as_ref().is_none_or(|(text, _)| *text != label) {
-                self.touch_id_label = self.text.as_ref().map(|text| {
-                    (
-                        label,
-                        text.render(
-                            label,
-                            touch_id_view::text_size(height),
-                            touch_id_view::text_width(height),
-                            height,
-                        ),
-                    )
-                });
-            }
-            let text = self
-                .touch_id_label
-                .as_ref()
-                .map(|(_, mask)| (mask.pixels.as_slice(), mask.width, mask.height));
-            return touch_id_view::draw(&mut frame, state, text, self.now.as_secs_f64(), opacity)
-                .map_err(|_| RendererError::Frame);
+        if Self::draw_touch_id(
+                &mut frame,
+                self.overlay_visual_state,
+                &mut self.touch_id_label,
+                self.text.as_ref(),
+                self.now,
+                opacity,
+            )? {
+            return Ok(());
         }
         self.touch_id
             .render_with_progress(
@@ -841,6 +845,41 @@ impl Session {
                 opacity,
             )
             .map_err(|_| RendererError::Frame)
+    }
+
+    /// Draws the Leo Camp Touch ID prompt; false when the state is left to
+    /// the stock overlay (enrollment) or no prompt is shown.
+    fn draw_touch_id(
+        frame: &mut Xrgb8888Frame<'_>,
+        overlay_visual_state: Option<OverlayState>,
+        touch_id_label: &mut Option<(&'static str, TextMask)>,
+        text: Option<&TextRenderer>,
+        now: Duration,
+        opacity: u8,
+    ) -> Result<bool, RendererError> {
+        if let Some(state) = overlay_visual_state.filter(|state| touch_id_view::handles(*state)) {
+            let label = touch_id_view::label(state);
+            if touch_id_label.as_ref().is_none_or(|(text, _)| *text != label) {
+                *touch_id_label = text.map(|renderer| {
+                    (
+                        label,
+                        renderer.render(
+                            label,
+                            touch_id_view::text_size(frame.height()),
+                            touch_id_view::text_width(frame.height()),
+                            frame.height(),
+                        ),
+                    )
+                });
+            }
+            let text = touch_id_label
+                .as_ref()
+                .map(|(_, mask)| (mask.pixels.as_slice(), mask.width, mask.height));
+            touch_id_view::draw(frame, state, text, now.as_secs_f64(), opacity)
+                .map_err(|_| RendererError::Frame)?;
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     fn set_overlay(&mut self, state: Option<OverlayState>, progress: Option<u8>) {
